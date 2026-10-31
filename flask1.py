@@ -1,6 +1,6 @@
 import datetime
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from flask_mysqldb import MySQL
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,17 +11,41 @@ import mysql.connector
 from dotenv import load_dotenv
 
 import smtplib
+import json
+import urllib.parse
+import urllib.request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(BASE_DIR, '.env'))
+# Override stale shell/system variables so local .env credentials are used.
+load_dotenv(os.path.join(BASE_DIR, '.env'), override=True)
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
 
 
+def _env_int(name, default):
+    value = os.getenv(name)
+    if value is None or value.strip() == '':
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _verify_password(stored_password, provided_password):
+    if not stored_password or not provided_password:
+        return False
+    try:
+        return check_password_hash(stored_password, provided_password)
+    except (ValueError, TypeError):
+        # Backward compatibility for legacy rows that may still store plain text.
+        return stored_password == provided_password
+
+
 # Database config
 app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST')
-app.config['MYSQL_PORT'] = int(os.getenv('MYSQL_PORT', '3306'))
+app.config['MYSQL_PORT'] = _env_int('MYSQL_PORT', 3306)
 app.config['MYSQL_USER'] = os.getenv('MYSQL_USER')
 app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD')
 app.config['MYSQL_DB'] = os.getenv('MYSQL_DB')
@@ -30,7 +54,7 @@ mysql = MySQL(app)
  
 # Flask-Mail Config
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
-app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', '587'))
+app.config['MAIL_PORT'] = _env_int('MAIL_PORT', 587)
 app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').strip().lower() in ('1', 'true', 'yes', 'on')
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
@@ -246,7 +270,7 @@ def login():
             db_password, is_verified, role = user
             if not is_verified:
                 flash('Email not verified. Please verify your email.', 'warning')
-            elif check_password_hash(db_password, password):
+            elif _verify_password(db_password, password):
                 session['user'] = email
                 session['role'] = role  # Store the role in the session
                 flash('Login successful!', 'success')
@@ -321,6 +345,56 @@ def book_slot():
         return render_template('book_slot.html', tomtom_api_key=app.config['TOMTOM_API_KEY'])
     flash('You need to login first.', 'warning')
     return redirect(url_for('login'))
+
+
+@app.route('/api/geocode')
+def api_geocode():
+    query = (request.args.get('q') or '').strip()
+    api_key = app.config.get('TOMTOM_API_KEY')
+
+    if not query:
+        return jsonify({'error': 'Missing search query.'}), 400
+    if not api_key:
+        return jsonify({'error': 'TomTom API key is not configured on server.'}), 500
+
+    try:
+        encoded_query = urllib.parse.quote(query)
+        encoded_key = urllib.parse.quote(api_key)
+        url = f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?key={encoded_key}"
+        with urllib.request.urlopen(url, timeout=15) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        return jsonify(data)
+    except Exception as exc:
+        app.logger.error(f"Geocode proxy error: {exc}")
+        return jsonify({'error': 'Unable to fetch location from TomTom.'}), 502
+
+
+@app.route('/api/nearby_parking')
+def api_nearby_parking():
+    api_key = app.config.get('TOMTOM_API_KEY')
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    radius = request.args.get('radius', '5000')
+
+    if not api_key:
+        return jsonify({'error': 'TomTom API key is not configured on server.'}), 500
+    if not lat or not lon:
+        return jsonify({'error': 'Missing lat/lon parameters.'}), 400
+
+    try:
+        url = (
+            "https://api.tomtom.com/search/2/categorySearch/parking.json"
+            f"?key={urllib.parse.quote(api_key)}"
+            f"&lat={urllib.parse.quote(lat)}"
+            f"&lon={urllib.parse.quote(lon)}"
+            f"&radius={urllib.parse.quote(radius)}"
+        )
+        with urllib.request.urlopen(url, timeout=15) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        return jsonify(data)
+    except Exception as exc:
+        app.logger.error(f"Nearby parking proxy error: {exc}")
+        return jsonify({'error': 'Unable to fetch nearby parking from TomTom.'}), 502
 
 
 @app.route('/confirm_slot')
@@ -881,7 +955,7 @@ def add_car():
         finally:
             cursor.close()
 
-        return redirect(url_for('manager_add_car'))
+        return redirect(url_for('add_car'))
 
     return render_template("add_car.html", parking_id=parking_id)
 
@@ -898,4 +972,5 @@ def logout():
     return redirect(url_for('login'))
 
 
-app.run(debug = True)
+if __name__ == '__main__':
+    app.run(debug=True)

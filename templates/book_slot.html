@@ -71,14 +71,39 @@
 <script>
   const apiKey = "{{ tomtom_api_key }}";
 
+  // Use an explicit raster basemap so tiles remain visible even if TomTom
+  // style/tile permissions are restricted for the current API key.
+  const fallbackRasterStyle = {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "© OpenStreetMap contributors",
+      },
+    },
+    layers: [
+      {
+        id: "osm-raster",
+        type: "raster",
+        source: "osm",
+      },
+    ],
+  };
+
   const map = tt.map({
     key: apiKey,
     container: "map",
+    style: fallbackRasterStyle,
     center: [75.94298, 22.821053],
     zoom: 12,
   });
 
   map.addControl(new tt.NavigationControl());
+  map.on("error", (event) => {
+    console.error("Map rendering error:", event && event.error ? event.error : event);
+  });
 
   let userLocation = { lat: 22.821053, lng: 75.94298 };
 
@@ -88,17 +113,63 @@
     .setLngLat([userLocation.lng, userLocation.lat])
     .addTo(map);
 
+  let parkingMarkers = [];
+
+  const clearParkingMarkers = () => {
+    parkingMarkers.forEach((item) => item.remove());
+    parkingMarkers = [];
+  };
+
+  const addParkingMarker = (place) => {
+    const name = place.poi?.name || "Unnamed Parking";
+    const address = place.address?.freeformAddress || "N/A";
+    const lat = place.position?.lat;
+    const lon = place.position?.lon;
+
+    if (typeof lat !== "number" || typeof lon !== "number") {
+      return;
+    }
+
+    const popup = new tt.Popup({ offset: 30 }).setHTML(
+      `<div style="font-size:13px;"><strong>${name}</strong><br>${address}</div>`
+    );
+
+    const parkingMarker = new tt.Marker({ color: "#16a34a" })
+      .setLngLat([lon, lat])
+      .setPopup(popup)
+      .addTo(map);
+
+    parkingMarkers.push(parkingMarker);
+  };
+
   const fetchNearbyParking = async (lat, lng) => {
     userLocation = { lat, lng };
-    const url = `https://api.tomtom.com/search/2/categorySearch/parking.json?key=${apiKey}&lat=${lat}&lon=${lng}&radius=5000`;
-    const response = await fetch(url);
-    const data = await response.json();
     const resultsContainer = document.getElementById("results-container");
     resultsContainer.innerHTML = "";
+    clearParkingMarkers();
+
+    let data;
+    try {
+      const url = `/api/nearby_parking?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&radius=5000`;
+      const response = await fetch(url);
+      data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Unable to fetch nearby parking.");
+      }
+    } catch (error) {
+      resultsContainer.innerHTML = `<p class="text-center text-red-600">${error.message}</p>`;
+      return;
+    }
 
     if (data.results && data.results.length > 0) {
+      const bounds = new tt.LngLatBounds();
+      bounds.extend([lng, lat]);
+
       data.results.forEach((place) => {
         const distance = calculateDistance(lat, lng, place.position.lat, place.position.lon);
+        addParkingMarker(place);
+        bounds.extend([place.position.lon, place.position.lat]);
+
         const resultDiv = document.createElement("div");
         resultDiv.className = "bg-blue-50 p-4 rounded-lg shadow flex justify-between items-center text-blue-900 font-semibold";
         resultDiv.innerHTML = `
@@ -116,6 +187,8 @@
         `;
         resultsContainer.appendChild(resultDiv);
       });
+
+      map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
     } else {
       resultsContainer.innerHTML = `<p class="text-center text-gray-500">No parking options found nearby.</p>`;
     }
@@ -142,9 +215,18 @@
       return;
     }
 
-    const url = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(query)}.json?key=${apiKey}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    let data;
+    try {
+      const url = `/api/geocode?q=${encodeURIComponent(query)}`;
+      const response = await fetch(url);
+      data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Unable to search location.");
+      }
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
 
     if (data.results && data.results.length > 0) {
       const location = data.results[0].position;
