@@ -47,7 +47,7 @@
         <h3 class="text-xl font-semibold">Real Time Parking Info</h3>
       </div>
       <p class="text-gray-600 mb-6">View and manage all parking lot under your supervision.</p>
-      <a href="{{ url_for('view_parking_lots') }}" class="inline-flex items-center px-5 py-2 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition">
+      <a href="{{ url_for('manager_live_parking_info_page') }}" class="inline-flex items-center px-5 py-2 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700 transition">
         View Parking
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -85,7 +85,7 @@
         <h3 class="text-xl font-semibold">Parking Analytics</h3>
       </div>
       <p class="text-gray-600 mb-6">View real-time occupancy rates and revenue analytics.</p>
-      <a href="{{ url_for('parking_manager_dashboard') }}" class="inline-flex items-center px-5 py-2 bg-purple-600 text-white rounded-full font-semibold hover:bg-purple-700 transition">
+      <a href="{{ url_for('manager_analytics_page') }}" class="inline-flex items-center px-5 py-2 bg-purple-600 text-white rounded-full font-semibold hover:bg-purple-700 transition">
         View Analytics
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

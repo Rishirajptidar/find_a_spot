@@ -1,6 +1,6 @@
 import datetime
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, Response
 from flask_mysqldb import MySQL
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,6 +14,10 @@ import smtplib
 import json
 import urllib.parse
 import urllib.request
+import csv
+from io import StringIO
+
+from analytics.services import analytics_to_csv_rows, get_manager_analytics
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Override stale shell/system variables so local .env credentials are used.
@@ -41,6 +45,57 @@ def _verify_password(stored_password, provided_password):
     except (ValueError, TypeError):
         # Backward compatibility for legacy rows that may still store plain text.
         return stored_password == provided_password
+
+
+def _ensure_realtime_slots_for_parking(parking_id):
+    """Ensure real_time_parking_info has one row per slot for this parking lot."""
+    if not parking_id:
+        return 0
+
+    cursor = mysql.connection.cursor()
+    try:
+        cursor.execute("SELECT Capacity FROM parking_lots WHERE parking_id = %s", (parking_id,))
+        row = cursor.fetchone()
+        if not row:
+            return 0
+
+        try:
+            capacity = int(row[0] or 0)
+        except (TypeError, ValueError):
+            capacity = 0
+
+        if capacity <= 0:
+            return 0
+
+        cursor.execute("SELECT slot_no FROM real_time_parking_info WHERE parking_id = %s", (parking_id,))
+        existing_rows = cursor.fetchall()
+
+        existing_slots = set()
+        for item in existing_rows:
+            try:
+                existing_slots.add(int(item[0]))
+            except (TypeError, ValueError):
+                continue
+
+        missing_slots = [slot_no for slot_no in range(1, capacity + 1) if slot_no not in existing_slots]
+
+        if missing_slots:
+            cursor.executemany(
+                """
+                INSERT INTO real_time_parking_info
+                (parking_id, slot_no, is_occupied, vehicle_no, entry_time, exit_time, charges)
+                VALUES (%s, %s, 0, NULL, NULL, NULL, 0.00)
+                """,
+                [(parking_id, slot_no) for slot_no in missing_slots]
+            )
+            mysql.connection.commit()
+
+        return len(missing_slots)
+    except Exception:
+        mysql.connection.rollback()
+        raise
+    finally:
+        cursor.close()
 
 
 # Database config
@@ -702,6 +757,10 @@ def view_parking_lots():
 
 @app.route('/live_parking_info')
 def live_parking_info_page():
+    if 'user' not in session or session.get('role') != 'admin':
+        flash('Access restricted to admins only.', 'danger')
+        return redirect(url_for('login'))
+
     cursor = mysql.connection.cursor()
     cursor.execute("SELECT parking_id, Name, Address FROM parking_lots")
     parking_lots = cursor.fetchall()
@@ -711,9 +770,14 @@ def live_parking_info_page():
 
 @app.route('/api/live_parking_info')
 def live_parking_info_api():
+    if 'user' not in session or session.get('role') != 'admin':
+        return jsonify({'slots': [], 'error': 'Unauthorized'}), 403
+
     parking_id = request.args.get('parking_id')
     if not parking_id:
         return {'slots': []}
+
+    _ensure_realtime_slots_for_parking(parking_id)
 
     cursor = mysql.connection.cursor()
     query = """
@@ -722,6 +786,57 @@ def live_parking_info_api():
         WHERE parking_id = %s ORDER BY slot_no ASC
     """
     cursor.execute(query, (parking_id,))
+    slots = cursor.fetchall()
+    cursor.close()
+
+    slot_list = [{
+        'slot_no': s[0],
+        'is_occupied': bool(s[1]),
+        'vehicle_no': s[2],
+        'entry_time': s[3].strftime("%Y-%m-%d %H:%M") if s[3] else None
+    } for s in slots]
+
+    return {'slots': slot_list}
+
+
+@app.route('/manager/live_parking_info')
+def manager_live_parking_info_page():
+    if 'parking_id' not in session:
+        flash('Please login as parking manager.', 'warning')
+        return redirect(url_for('manager_login'))
+
+    cursor = mysql.connection.cursor()
+    cursor.execute(
+        "SELECT parking_id, Name, Address FROM parking_lots WHERE parking_id = %s",
+        (session['parking_id'],)
+    )
+    lot = cursor.fetchone()
+    cursor.close()
+
+    if not lot:
+        flash('Parking lot not found for this manager.', 'danger')
+        return redirect(url_for('manager_login'))
+
+    _ensure_realtime_slots_for_parking(session['parking_id'])
+
+    parking_lot = {'parking_id': lot[0], 'Name': lot[1], 'Address': lot[2]}
+    return render_template('manager_live_parking_info.html', parking_lot=parking_lot)
+
+
+@app.route('/manager/api/live_parking_info')
+def manager_live_parking_info_api():
+    if 'parking_id' not in session:
+        return jsonify({'slots': [], 'error': 'Unauthorized'}), 403
+
+    _ensure_realtime_slots_for_parking(session['parking_id'])
+
+    cursor = mysql.connection.cursor()
+    query = """
+        SELECT slot_no, is_occupied, vehicle_no, entry_time
+        FROM real_time_parking_info
+        WHERE parking_id = %s ORDER BY slot_no ASC
+    """
+    cursor.execute(query, (session['parking_id'],))
     slots = cursor.fetchall()
     cursor.close()
 
@@ -779,10 +894,6 @@ def delete_user(user_id):
     return redirect(url_for('login'))
 
 
-
-import csv
-from io import StringIO
-from flask import Response
 
 @app.route('/admin/reports', methods=['GET', 'POST'])
 def admin_reports():
@@ -911,6 +1022,118 @@ def parking_manager_dashboard():
         return redirect(url_for('manager_login'))
 
     return render_template('parking_manager_dashboard.html')
+
+
+@app.route('/manager/analytics')
+def manager_analytics_page():
+    if 'parking_id' not in session:
+        flash("Please login as parking manager.", "warning")
+        return redirect(url_for('manager_login'))
+
+    cursor = mysql.connection.cursor()
+    cursor.execute(
+        "SELECT Name, Address FROM parking_lots WHERE parking_id = %s",
+        (session['parking_id'],)
+    )
+    lot = cursor.fetchone()
+    cursor.close()
+
+    if not lot:
+        flash("Assigned parking lot not found.", "danger")
+        return redirect(url_for('manager_login'))
+
+    manager_name = f"Manager-{session['parking_id']}"
+    return render_template(
+        'manager_analytics.html',
+        parking_name=lot[0],
+        parking_address=lot[1],
+        parking_id=session['parking_id'],
+        manager_name=manager_name,
+        today=datetime.now().strftime("%Y-%m-%d")
+    )
+
+
+@app.route('/api/manager/analytics')
+def manager_analytics_api():
+    if 'parking_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    range_key = (request.args.get('range') or 'last_30_days').strip().lower()
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    trend_period = (request.args.get('period') or 'weekly').strip().lower()
+    occupancy_period = (request.args.get('occupancy_period') or 'daily').strip().lower()
+
+    allowed_ranges = {
+        'today', 'yesterday', 'last_7_days', 'last_30_days',
+        'this_week', 'this_month', 'this_year', 'custom'
+    }
+    allowed_periods = {'hourly', 'daily', 'weekly', 'monthly', 'yearly'}
+
+    if range_key not in allowed_ranges:
+        range_key = 'last_30_days'
+    if trend_period not in allowed_periods:
+        trend_period = 'weekly'
+    if occupancy_period not in allowed_periods:
+        occupancy_period = 'daily'
+
+    try:
+        analytics = get_manager_analytics(
+            connection=mysql.connection,
+            parking_id=session['parking_id'],
+            filter_key=range_key,
+            start_date=start_date,
+            end_date=end_date,
+            trend_period=trend_period,
+            occupancy_period=occupancy_period,
+        )
+        return jsonify(analytics)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        app.logger.error(f"Manager analytics API error: {exc}")
+        return jsonify({'error': 'Unable to fetch analytics right now.'}), 500
+
+
+@app.route('/api/manager/analytics/export.csv')
+def manager_analytics_export_csv():
+    if 'parking_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    range_key = (request.args.get('range') or 'last_30_days').strip().lower()
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    trend_period = (request.args.get('period') or 'weekly').strip().lower()
+    occupancy_period = (request.args.get('occupancy_period') or 'daily').strip().lower()
+
+    try:
+        analytics = get_manager_analytics(
+            connection=mysql.connection,
+            parking_id=session['parking_id'],
+            filter_key=range_key,
+            start_date=start_date,
+            end_date=end_date,
+            trend_period=trend_period,
+            occupancy_period=occupancy_period,
+        )
+        headers, rows = analytics_to_csv_rows(analytics)
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+        filename = f"manager_analytics_{session['parking_id']}.csv"
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        app.logger.error(f"Manager analytics export error: {exc}")
+        return jsonify({'error': 'Unable to export analytics right now.'}), 500
 
 
 

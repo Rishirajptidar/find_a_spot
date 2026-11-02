@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}My Live Parking Details - Find-A-Spot{% endblock %}
+
+{% block content %}
+<div class="container my-16">
+  <h1 class="text-4xl font-extrabold text-center text-blue-700 mb-4">Live Parking Slot Details</h1>
+  <p class="text-center text-gray-600 mb-10">
+    Showing real-time status for your assigned parking lot only.
+  </p>
+
+  <div class="bg-white rounded-xl shadow-md p-5 mb-8 border border-blue-100">
+    <p class="text-lg font-semibold text-blue-700">{{ parking_lot.Name }}</p>
+    <p class="text-sm text-gray-600">Parking ID: {{ parking_lot.parking_id }}</p>
+    <p class="text-sm text-gray-600">Address: {{ parking_lot.Address }}</p>
+  </div>
+
+  <div id="slotsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="text-center col-span-3 text-gray-600">Loading slot data...</div>
+  </div>
+</div>
+
+<script>
+  const container = document.getElementById('slotsContainer');
+
+  async function loadSlots() {
+    try {
+      const res = await fetch('/manager/api/live_parking_info');
+      const data = await res.json();
+
+      container.innerHTML = '';
+
+      if (!res.ok || data.error) {
+        container.innerHTML = `<div class="text-red-600 text-center col-span-3">${data.error || 'Failed to load data.'}</div>`;
+        return;
+      }
+
+      if (!data.slots || data.slots.length === 0) {
+        container.innerHTML = '<div class="text-center col-span-3 text-gray-500">No slot data available.</div>';
+        return;
+      }
+
+      for (let slot of data.slots) {
+        const card = document.createElement('div');
+        card.className = `bg-white p-6 rounded-xl shadow-lg border-l-4 transition-all duration-300 ${slot.is_occupied ? 'border-red-500' : 'border-green-500'}`;
+        card.innerHTML = `
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-xl font-semibold text-gray-800">Slot ${slot.slot_no}</h3>
+            ${slot.is_occupied ? '<span class="text-red-600 font-bold">Occupied</span>' : '<span class="text-green-600 font-bold">Available</span>'}
+          </div>
+          <div class="text-gray-600 text-sm">
+            ${slot.is_occupied ? `
+              <p><strong>Vehicle No:</strong> ${slot.vehicle_no || 'N/A'}</p>
+              <p><strong>Entry Time:</strong> ${slot.entry_time || 'N/A'}</p>
+            ` : '<p>This slot is currently free.</p>'}
+          </div>
+        `;
+        container.appendChild(card);
+      }
+    } catch (err) {
+      container.innerHTML = '<div class="text-red-600 text-center col-span-3">Failed to load data.</div>';
+    }
+  }
+
+  loadSlots();
+  setInterval(loadSlots, 15000);
+</script>
+{% endblock %}

@@ -1,0 +1,535 @@
+{% extends 'base.html' %}
+
+{% block title %}Parking Analytics - Find-A-Spot{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-10">
+  <section class="bg-white rounded-xl shadow-md p-6 mb-8 border border-blue-100">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+      <div>
+        <h1 class="text-3xl font-bold text-blue-700">Parking Analytics</h1>
+        <p class="text-gray-600 mt-1">{{ parking_name }} ({{ parking_id }})</p>
+        <p class="text-sm text-gray-500 mt-1">{{ parking_address }}</p>
+        <p class="text-sm text-gray-500 mt-1">Manager: {{ manager_name }}</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div class="bg-blue-50 rounded-lg px-3 py-2">
+          <p class="text-gray-600">Current Date</p>
+          <p class="font-semibold text-gray-800" id="metaCurrentDate">{{ today }}</p>
+        </div>
+        <div class="bg-blue-50 rounded-lg px-3 py-2">
+          <p class="text-gray-600">Last Refresh</p>
+          <p class="font-semibold text-gray-800" id="metaLastRefresh">-</p>
+        </div>
+        <div class="bg-blue-50 rounded-lg px-3 py-2 md:col-span-2">
+          <p class="text-gray-600">Selected Reporting Period</p>
+          <p class="font-semibold text-gray-800" id="metaSelectedPeriod">Last 30 Days</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <div class="lg:col-span-8">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Quick Range</label>
+        <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2" id="quickRangeButtons">
+          <button data-range="today" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">Today</button>
+          <button data-range="yesterday" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">Yesterday</button>
+          <button data-range="last_7_days" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">Last 7 Days</button>
+          <button data-range="last_30_days" class="range-btn bg-blue-600 text-white px-3 py-2 rounded-md text-sm">Last 30 Days</button>
+          <button data-range="this_week" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">This Week</button>
+          <button data-range="this_month" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">This Month</button>
+          <button data-range="this_year" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">This Year</button>
+          <button data-range="custom" class="range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm">Custom</button>
+        </div>
+      </div>
+
+      <div class="lg:col-span-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Chart Period</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button class="chart-period-btn bg-blue-600 text-white px-3 py-2 rounded-md text-sm" data-period="weekly">Weekly</button>
+          <button class="chart-period-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm" data-period="monthly">Monthly</button>
+          <button class="chart-period-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm" data-period="yearly">Yearly</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+        <input id="startDate" type="date" class="w-full border border-gray-300 rounded-md px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+        <input id="endDate" type="date" class="w-full border border-gray-300 rounded-md px-3 py-2" />
+      </div>
+      <div class="md:col-span-3 flex flex-wrap items-end gap-2">
+        <button id="applyFilter" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Apply</button>
+        <button id="resetFilter" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Reset</button>
+        <button id="refreshAnalytics" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Refresh Analytics</button>
+        <a id="exportCsvLink" href="#" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Export CSV</a>
+        <button id="printReport" class="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800">Print</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8" id="kpiCards"></section>
+
+  <section class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold text-gray-800">Parking Occupancy</h2>
+        <select id="occupancyPeriod" class="border border-gray-300 rounded-md px-2 py-1 text-sm">
+          <option value="hourly">Hourly</option>
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      <p class="text-sm text-gray-600 mb-2" id="occupancySummary">-</p>
+      <canvas id="occupancyChart" height="140"></canvas>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">Revenue Analytics</h2>
+      <canvas id="revenueTrendChart" height="140"></canvas>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Revenue by Payment Method</h3>
+          <canvas id="paymentMethodChart" height="140"></canvas>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Revenue by Location</h3>
+          <canvas id="locationRevenueChart" height="140"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">Booking Analytics</h2>
+      <canvas id="bookingTrendChart" height="140"></canvas>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Bookings by Day</h3>
+          <canvas id="bookingDayChart" height="130"></canvas>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Bookings by Hour</h3>
+          <canvas id="bookingHourChart" height="130"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">Parking Duration Analytics</h2>
+      <p class="text-sm text-gray-600 mb-2" id="durationSummary">-</p>
+      <canvas id="durationDistributionChart" height="140"></canvas>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-xl shadow p-5 mb-8">
+    <h2 class="text-xl font-semibold text-gray-800 mb-3">Parking Demand by Day and Hour</h2>
+    <div class="overflow-auto">
+      <table class="min-w-full text-sm border border-gray-200" id="heatmapTable"></table>
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">Top Customers</h2>
+      <div class="overflow-auto">
+        <table class="min-w-full text-sm" id="topCustomersTable"></table>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">Parking Slot Performance</h2>
+      <div class="overflow-auto">
+        <table class="min-w-full text-sm" id="slotPerformanceTable"></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-xl shadow p-5 mb-8">
+    <h2 class="text-xl font-semibold text-gray-800 mb-3">Recent Booking Analytics</h2>
+    <div class="overflow-auto">
+      <table class="min-w-full text-sm" id="recentBookingsTable"></table>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-xl shadow p-5">
+    <h2 class="text-xl font-semibold text-gray-800 mb-3">Parking Location Performance</h2>
+    <div class="overflow-auto">
+      <table class="min-w-full text-sm" id="locationPerformanceTable"></table>
+    </div>
+    <p class="text-xs text-gray-500 mt-3" id="vehicleNote"></p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const state = {
+    range: "last_30_days",
+    period: "weekly",
+    occupancyPeriod: "daily",
+    startDate: "",
+    endDate: "",
+    charts: {}
+  };
+
+  function fmtMoney(value) {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
+  }
+
+  function fmtNum(value) {
+    return new Intl.NumberFormat("en-IN").format(Number(value || 0));
+  }
+
+  function growthText(growthObj) {
+    if (!growthObj || growthObj.value === null || growthObj.label === "N/A") {
+      return "N/A vs previous period";
+    }
+    return `${growthObj.label} vs previous period`;
+  }
+
+  function renderKpis(data) {
+    const cards = [
+      { title: "Total Revenue", value: fmtMoney(data.kpis.revenue.total_revenue), sub: growthText(data.kpis.revenue.growth_vs_previous) },
+      { title: "Average Revenue / Booking", value: fmtMoney(data.kpis.revenue.avg_revenue_per_booking), sub: "Paid successful bookings" },
+      { title: "Revenue Today", value: fmtMoney(data.kpis.revenue.revenue_today), sub: "Current day" },
+      { title: "Revenue This Week", value: fmtMoney(data.kpis.revenue.revenue_this_week), sub: "Current week" },
+      { title: "Revenue This Month", value: fmtMoney(data.kpis.revenue.revenue_this_month), sub: "Current month" },
+      { title: "Total Slots", value: fmtNum(data.kpis.parking.total_slots), sub: `Occupied ${fmtNum(data.kpis.parking.occupied_slots)} | Available ${fmtNum(data.kpis.parking.available_slots)}` },
+      { title: "Occupancy Rate", value: `${data.kpis.parking.occupancy_rate}%`, sub: growthText(data.occupancy.growth_vs_previous) },
+      { title: "Total Bookings", value: fmtNum(data.kpis.parking.total_bookings), sub: growthText(data.kpis.parking.growth_vs_previous) },
+      { title: "Completed Bookings", value: fmtNum(data.kpis.parking.completed_bookings), sub: `Cancelled ${fmtNum(data.kpis.parking.cancelled_bookings)} | Active ${fmtNum(data.kpis.parking.active_bookings)}` },
+      { title: "Total Parking Hours", value: fmtNum(data.kpis.usage.total_parking_hours), sub: growthText(data.kpis.usage.growth_vs_previous) },
+      { title: "Average Stay Duration", value: `${fmtNum(data.kpis.usage.average_stay_duration_hours)} hrs`, sub: `Median ${fmtNum(data.kpis.usage.median_duration_hours)} hrs` },
+      { title: "Peak Parking", value: `${data.kpis.usage.peak_parking_hour}`, sub: `Peak day ${data.kpis.usage.peak_parking_day}` },
+      { title: "Total Customers", value: fmtNum(data.kpis.customers.total_customers), sub: growthText(data.kpis.customers.growth_vs_previous) },
+      { title: "New Customers", value: fmtNum(data.kpis.customers.new_customers), sub: `Returning ${fmtNum(data.kpis.customers.returning_customers)}` },
+      { title: "Avg Bookings / Customer", value: fmtNum(data.kpis.customers.avg_bookings_per_customer), sub: "Selected period" }
+    ];
+
+    const html = cards.map(card => `
+      <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+        <p class="text-xs uppercase tracking-wide text-gray-500">${card.title}</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1">${card.value}</p>
+        <p class="text-xs text-gray-500 mt-1">${card.sub}</p>
+      </div>
+    `).join("");
+
+    document.getElementById("kpiCards").innerHTML = html;
+    document.getElementById("occupancySummary").textContent = `Avg ${data.occupancy.average_rate}% | Max ${data.occupancy.max_rate}% | Min ${data.occupancy.min_rate}% | Peak ${data.occupancy.peak_day} ${data.occupancy.peak_time}`;
+    document.getElementById("durationSummary").textContent = `Total ${fmtNum(data.parking_duration.total_hours)} hrs | Min ${fmtNum(data.parking_duration.minimum_hours)} hrs | Max ${fmtNum(data.parking_duration.maximum_hours)} hrs | Long-stay ${fmtNum(data.parking_duration.long_stay_vehicles)}`;
+    document.getElementById("vehicleNote").textContent = data.vehicles.message || "";
+  }
+
+  function killChart(id) {
+    if (state.charts[id]) {
+      state.charts[id].destroy();
+    }
+  }
+
+  function renderLineChart(id, labels, values, label, color) {
+    killChart(id);
+    state.charts[id] = new Chart(document.getElementById(id), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label,
+          data: values,
+          borderColor: color,
+          backgroundColor: color + "33",
+          fill: true,
+          tension: 0.2
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: true } } }
+    });
+  }
+
+  function renderBarChart(id, labels, values, label, color) {
+    killChart(id);
+    state.charts[id] = new Chart(document.getElementById(id), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{ label, data: values, backgroundColor: color }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+  }
+
+  function renderDoughnutChart(id, labels, values) {
+    killChart(id);
+    state.charts[id] = new Chart(document.getElementById(id), {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0f766e"]
+        }]
+      },
+      options: { responsive: true }
+    });
+  }
+
+  function renderCharts(data) {
+    renderLineChart(
+      "occupancyChart",
+      data.occupancy.trend.map(x => x.label),
+      data.occupancy.trend.map(x => x.value),
+      "Occupancy Rate (%)",
+      "#2563eb"
+    );
+
+    renderLineChart(
+      "revenueTrendChart",
+      data.revenue.trend.map(x => x.label),
+      data.revenue.trend.map(x => x.value),
+      "Revenue",
+      "#16a34a"
+    );
+
+    renderDoughnutChart(
+      "paymentMethodChart",
+      data.revenue.by_payment_method.map(x => x.label),
+      data.revenue.by_payment_method.map(x => x.value)
+    );
+
+    renderBarChart(
+      "locationRevenueChart",
+      data.revenue.by_location.map(x => x.label),
+      data.revenue.by_location.map(x => x.value),
+      "Revenue",
+      "#6366f1"
+    );
+
+    renderLineChart(
+      "bookingTrendChart",
+      data.bookings.trend.map(x => x.label),
+      data.bookings.trend.map(x => x.value),
+      "Bookings",
+      "#7c3aed"
+    );
+
+    renderBarChart(
+      "bookingDayChart",
+      data.bookings.distribution.day_of_week.map(x => x.label),
+      data.bookings.distribution.day_of_week.map(x => x.value),
+      "Bookings",
+      "#0f766e"
+    );
+
+    renderBarChart(
+      "bookingHourChart",
+      data.bookings.distribution.hour_of_day.map(x => x.label),
+      data.bookings.distribution.hour_of_day.map(x => x.value),
+      "Bookings",
+      "#f59e0b"
+    );
+
+    renderBarChart(
+      "durationDistributionChart",
+      data.parking_duration.distribution.map(x => x.label),
+      data.parking_duration.distribution.map(x => x.value),
+      "Vehicles",
+      "#dc2626"
+    );
+  }
+
+  function renderHeatmap(data) {
+    const table = document.getElementById("heatmapTable");
+    const hours = [...Array(24).keys()];
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const heat = data.demand_heatmap || {};
+
+    const head = `<thead><tr class="bg-gray-100"><th class="p-2 border">Day</th>${hours.map(h => `<th class="p-2 border">${String(h).padStart(2, "0")}:00</th>`).join("")}</tr></thead>`;
+
+    const rows = days.map(day => {
+      const values = heat[day] || Array(24).fill(0);
+      return `<tr><td class="p-2 border font-semibold">${day}</td>${values.map(v => {
+        const intensity = Math.min(1, Number(v || 0) / 10);
+        const bg = `rgba(37, 99, 235, ${0.08 + intensity * 0.45})`;
+        return `<td class="p-2 border text-center" style="background:${bg}">${v}</td>`;
+      }).join("")}</tr>`;
+    }).join("");
+
+    table.innerHTML = `${head}<tbody>${rows}</tbody>`;
+  }
+
+  function renderSimpleTable(elementId, headers, rows) {
+    const table = document.getElementById(elementId);
+    const head = `<thead><tr class="bg-gray-100">${headers.map(h => `<th class="text-left p-2 border-b border-gray-200">${h}</th>`).join("")}</tr></thead>`;
+    const bodyRows = rows.length ? rows.map(row => `<tr>${row.map(c => `<td class="p-2 border-b border-gray-100">${c}</td>`).join("")}</tr>`).join("") : `<tr><td class="p-3 text-gray-500" colspan="${headers.length}">No analytical data available for the selected period.</td></tr>`;
+    table.innerHTML = `${head}<tbody>${bodyRows}</tbody>`;
+  }
+
+  function renderTables(data) {
+    renderSimpleTable(
+      "topCustomersTable",
+      ["Customer", "Total Bookings", "Completed", "Parking Hours", "Total Spent", "Last Visit"],
+      data.tables.top_customers.map(x => [x.customer, x.total_bookings, x.completed_bookings, x.parking_hours, fmtMoney(x.total_spent), x.last_visit])
+    );
+
+    renderSimpleTable(
+      "slotPerformanceTable",
+      ["Slot", "Bookings", "Revenue", "Avg Duration (hrs)"],
+      data.tables.top_slots.map(x => [x.slot_no, x.bookings, fmtMoney(x.revenue), x.avg_duration_hours])
+    );
+
+    renderSimpleTable(
+      "recentBookingsTable",
+      ["Booking ID", "Customer", "Vehicle", "Parking", "Slot", "Entry", "Exit", "Duration (hrs)", "Amount", "Payment", "Status"],
+      data.tables.recent_bookings.map(x => [x.booking_id, x.customer, x.vehicle, x.parking_location, x.slot, x.entry, x.exit, x.duration_hours, fmtMoney(x.amount), x.payment_status, x.booking_status])
+    );
+
+    renderSimpleTable(
+      "locationPerformanceTable",
+      ["Parking ID", "Parking", "Total Slots", "Occupied", "Available", "Occupancy %", "Bookings", "Revenue", "Avg Duration (hrs)"],
+      data.tables.location_performance.map(x => [x.parking_id, x.parking_name, x.total_slots, x.occupied_slots, x.available_slots, x.occupancy_rate, x.bookings, fmtMoney(x.revenue), x.avg_duration_hours])
+    );
+  }
+
+  function setExportLink() {
+    const qs = new URLSearchParams({
+      range: state.range,
+      period: state.period,
+      occupancy_period: state.occupancyPeriod,
+      start_date: state.startDate || "",
+      end_date: state.endDate || ""
+    });
+    document.getElementById("exportCsvLink").href = `/api/manager/analytics/export.csv?${qs.toString()}`;
+  }
+
+  async function fetchAnalytics() {
+    const qs = new URLSearchParams({
+      range: state.range,
+      period: state.period,
+      occupancy_period: state.occupancyPeriod,
+      start_date: state.startDate || "",
+      end_date: state.endDate || ""
+    });
+
+    setExportLink();
+
+    const response = await fetch(`/api/manager/analytics?${qs.toString()}`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to load analytics.");
+    }
+
+    document.getElementById("metaSelectedPeriod").textContent = payload.meta.selected_period;
+    document.getElementById("metaLastRefresh").textContent = payload.meta.generated_at;
+
+    renderKpis(payload);
+    renderCharts(payload);
+    renderHeatmap(payload);
+    renderTables(payload);
+  }
+
+  function markActiveRangeButton() {
+    document.querySelectorAll(".range-btn").forEach(btn => {
+      const isActive = btn.dataset.range === state.range;
+      btn.className = isActive
+        ? "range-btn bg-blue-600 text-white px-3 py-2 rounded-md text-sm"
+        : "range-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm";
+    });
+  }
+
+  function markActiveChartPeriodButton() {
+    document.querySelectorAll(".chart-period-btn").forEach(btn => {
+      const isActive = btn.dataset.period === state.period;
+      btn.className = isActive
+        ? "chart-period-btn bg-blue-600 text-white px-3 py-2 rounded-md text-sm"
+        : "chart-period-btn bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md text-sm";
+    });
+  }
+
+  document.querySelectorAll(".range-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      state.range = btn.dataset.range;
+      markActiveRangeButton();
+      try {
+        await fetchAnalytics();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  document.querySelectorAll(".chart-period-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      state.period = btn.dataset.period;
+      markActiveChartPeriodButton();
+      try {
+        await fetchAnalytics();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+
+  document.getElementById("occupancyPeriod").addEventListener("change", async (e) => {
+    state.occupancyPeriod = e.target.value;
+    try {
+      await fetchAnalytics();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("applyFilter").addEventListener("click", async () => {
+    state.range = "custom";
+    state.startDate = document.getElementById("startDate").value;
+    state.endDate = document.getElementById("endDate").value;
+    markActiveRangeButton();
+    try {
+      await fetchAnalytics();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("resetFilter").addEventListener("click", async () => {
+    state.range = "last_30_days";
+    state.startDate = "";
+    state.endDate = "";
+    document.getElementById("startDate").value = "";
+    document.getElementById("endDate").value = "";
+    markActiveRangeButton();
+    try {
+      await fetchAnalytics();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("refreshAnalytics").addEventListener("click", async () => {
+    try {
+      await fetchAnalytics();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("printReport").addEventListener("click", () => window.print());
+
+  (async function init() {
+    markActiveRangeButton();
+    markActiveChartPeriodButton();
+    setExportLink();
+    try {
+      await fetchAnalytics();
+    } catch (err) {
+      alert(err.message);
+    }
+  })();
+</script>
+{% endblock %}
