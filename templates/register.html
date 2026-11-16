@@ -73,6 +73,15 @@
         </div>
       </div>
 
+      <!-- Age -->
+      <div class="relative">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Age</label>
+        <div class="flex items-center border-2 rounded-lg px-3 py-2 focus-within:border-blue-500 transition">
+          <i class="fas fa-user-clock text-gray-400 mr-2"></i>
+          <input type="number" name="age" min="18" max="100" class="w-full focus:outline-none bg-transparent" placeholder="30" required>
+        </div>
+      </div>
+
       <!-- Vehicle Information Section -->
       <div class="md:col-span-2">
         <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
@@ -90,12 +99,18 @@
         </div>
       </div>
 
-      <!-- Age -->
+      <!-- Vehicle Type -->
       <div class="relative">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Age</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
         <div class="flex items-center border-2 rounded-lg px-3 py-2 focus-within:border-blue-500 transition">
-          <i class="fas fa-user-clock text-gray-400 mr-2"></i>
-          <input type="number" name="age" min="18" max="100" class="w-full focus:outline-none bg-transparent" placeholder="30" required>
+          <i class="fas fa-car-side text-gray-400 mr-2"></i>
+          <select name="vehicle_type" class="w-full focus:outline-none bg-transparent" required>
+            <option value="">-- Select Vehicle Type --</option>
+            <option value="Car">Car</option>
+            <option value="Bike">Bike</option>
+            <option value="Scooter">Scooter</option>
+            <option value="Other">Other</option>
+          </select>
         </div>
       </div>
 
@@ -172,18 +187,6 @@
           <i class="fas fa-lock text-gray-400 mr-2"></i>
           <input type="password" name="password" class="w-full focus:outline-none bg-transparent" placeholder="********" required>
           <i class="fas fa-eye text-gray-400 ml-2 cursor-pointer" onclick="togglePassword(this)"></i>
-        </div>
-      </div>
-
-      <!-- Role -->
-      <div class="md:col-span-2 relative">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Register As</label>
-        <div class="flex items-center border-2 rounded-lg px-3 py-2 focus-within:border-blue-500 transition">
-          <i class="fas fa-user-tag text-gray-400 mr-2"></i>
-          <select name="role" class="w-full focus:outline-none bg-transparent">
-            <option value="customer">Customer</option>
-            <option value="admin">Admin</option>
-          </select>
         </div>
       </div>
 

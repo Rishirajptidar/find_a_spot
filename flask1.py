@@ -15,6 +15,8 @@ import json
 import urllib.parse
 import urllib.request
 import csv
+import math
+import re
 from io import StringIO
 
 from analytics.services import analytics_to_csv_rows, get_manager_analytics
@@ -45,6 +47,135 @@ def _verify_password(stored_password, provided_password):
     except (ValueError, TypeError):
         # Backward compatibility for legacy rows that may still store plain text.
         return stored_password == provided_password
+
+
+def _dms_to_decimal(degrees, minutes, seconds, direction):
+    decimal = float(degrees) + (float(minutes) / 60.0) + (float(seconds) / 3600.0)
+    if direction in ('S', 'W'):
+        decimal *= -1
+    return decimal
+
+
+def _parse_coordinates(raw_coordinates):
+    if not raw_coordinates:
+        return None
+
+    text = str(raw_coordinates).strip()
+    if not text:
+        return None
+
+    # Decimal format: "lat, lon"
+    if ',' in text:
+        parts = [part.strip() for part in text.split(',', 1)]
+        if len(parts) == 2:
+            try:
+                lat = float(parts[0])
+                lon = float(parts[1])
+                return lat, lon
+            except ValueError:
+                pass
+
+    # Decimal format: "lat lon"
+    decimal_match = re.search(
+        r"([-+]?\d{1,2}(?:\.\d+)?)\s+([-+]?\d{1,3}(?:\.\d+)?)",
+        text
+    )
+    if decimal_match:
+        try:
+            lat = float(decimal_match.group(1))
+            lon = float(decimal_match.group(2))
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                return lat, lon
+        except ValueError:
+            pass
+
+    # Decimal with hemisphere: "22.72 N, 75.85 E"
+    hemi_match = re.search(
+        r"([-+]?\d{1,2}(?:\.\d+)?)\s*([NS])\D+([-+]?\d{1,3}(?:\.\d+)?)\s*([EW])",
+        text,
+        re.IGNORECASE
+    )
+    if hemi_match:
+        lat = float(hemi_match.group(1))
+        lon = float(hemi_match.group(3))
+        if hemi_match.group(2).upper() == 'S':
+            lat *= -1
+        if hemi_match.group(4).upper() == 'W':
+            lon *= -1
+        return lat, lon
+
+    # DMS format: 22°44'25.8"N 75°53'18.5"E
+    pattern = re.compile(
+        r"(\d{1,3})\D+(\d{1,2})\D+(\d{1,2}(?:\.\d+)?)\D*([NS])\D+"
+        r"(\d{1,3})\D+(\d{1,2})\D+(\d{1,2}(?:\.\d+)?)\D*([EW])",
+        re.IGNORECASE
+    )
+    match = pattern.search(text)
+    if match:
+        lat = _dms_to_decimal(match.group(1), match.group(2), match.group(3), match.group(4).upper())
+        lon = _dms_to_decimal(match.group(5), match.group(6), match.group(7), match.group(8).upper())
+        return lat, lon
+
+    return None
+
+
+def _distance_km(lat1, lon1, lat2, lon2):
+    radius_km = 6371.0
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return radius_km * c
+
+
+_address_geocode_cache = {}
+
+
+def _resolve_coordinates(coordinates, address=None):
+    parsed = _parse_coordinates(coordinates)
+    if parsed:
+        return parsed
+
+    if not address:
+        return None
+
+    cleaned_address = str(address).strip()
+    if not cleaned_address:
+        return None
+
+    if cleaned_address in _address_geocode_cache:
+        return _address_geocode_cache[cleaned_address]
+
+    api_key = app.config.get('TOMTOM_API_KEY')
+    if not api_key:
+        return None
+
+    try:
+        encoded_query = urllib.parse.quote(cleaned_address)
+        encoded_key = urllib.parse.quote(api_key)
+        url = f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?key={encoded_key}&limit=1"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        results = data.get('results', [])
+        if results:
+            pos = results[0].get('position', {})
+            lat = pos.get('lat')
+            lon = pos.get('lon')
+            if lat is not None and lon is not None:
+                coords = (float(lat), float(lon))
+                _address_geocode_cache[cleaned_address] = coords
+                return coords
+    except Exception as exc:
+        app.logger.warning(f"Could not geocode address '{cleaned_address}': {exc}")
+
+    _address_geocode_cache[cleaned_address] = None
+    return None
 
 
 def _ensure_realtime_slots_for_parking(parking_id):
@@ -157,7 +288,7 @@ def register():
     if request.method == 'POST':
         try:
             # Get form data
-            role = request.form['role']
+            role = 'Customer'
             name = request.form['name']
             email = request.form['email']
             password = generate_password_hash(request.form['password'])
@@ -190,25 +321,24 @@ def register():
             )
             user_id = cursor.lastrowid
 
-            # Insert customer profile (if customer)
-            if role == 'customer':
-                cursor.execute(
-                    """INSERT INTO customer_profiles 
-                    (user_id, name, phone_no, vehicle_no, age, gender, address, city, state, photo)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (
-                        user_id,
-                        name,
-                        request.form.get('phone_no'),
-                        request.form.get('vehicle_no'),
-                        request.form.get('age'),
-                        request.form.get('gender'),
-                        request.form.get('address'),
-                        request.form.get('city'),
-                        request.form.get('state'),
-                        profile_image  # This can be None if no image uploaded
-                    )
+            # Public registration always creates a customer profile.
+            cursor.execute(
+                """INSERT INTO customer_profiles 
+                (user_id, name, phone_no, vehicle_no, age, gender, address, city, state, photo)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    user_id,
+                    name,
+                    request.form.get('phone_no'),
+                    request.form.get('vehicle_no'),
+                    request.form.get('age'),
+                    request.form.get('gender'),
+                    request.form.get('address'),
+                    request.form.get('city'),
+                    request.form.get('state'),
+                    profile_image  # This can be None if no image uploaded
                 )
+            )
 
             mysql.connection.commit()
 
@@ -323,17 +453,18 @@ def login():
 
         if user:
             db_password, is_verified, role = user
+            normalized_role = (role or '').strip().lower()
             if not is_verified:
                 flash('Email not verified. Please verify your email.', 'warning')
             elif _verify_password(db_password, password):
                 session['user'] = email
-                session['role'] = role  # Store the role in the session
+                session['role'] = normalized_role  # Store normalized role in the session
                 flash('Login successful!', 'success')
 
                 # Redirect to the appropriate dashboard based on the role
-                if role == 'customer':
+                if normalized_role == 'customer':
                     return redirect(url_for('customer_dashboard'))
-                elif role == 'admin':
+                elif normalized_role == 'admin':
                     return redirect(url_for('admin_dashboard'))
                 else:
                     flash('Role not recognized.', 'danger')
@@ -415,8 +546,9 @@ def api_geocode():
     try:
         encoded_query = urllib.parse.quote(query)
         encoded_key = urllib.parse.quote(api_key)
-        url = f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?key={encoded_key}"
-        with urllib.request.urlopen(url, timeout=15) as response:
+        url = f"https://api.tomtom.com/search/2/geocode/{encoded_query}.json?key={encoded_key}&limit=5"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Find-A-Spot/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as response:
             data = json.loads(response.read().decode('utf-8'))
         return jsonify(data)
     except Exception as exc:
@@ -429,7 +561,7 @@ def api_nearby_parking():
     api_key = app.config.get('TOMTOM_API_KEY')
     lat = request.args.get('lat')
     lon = request.args.get('lon')
-    radius = request.args.get('radius', '5000')
+    radius = request.args.get('radius', '10000')
 
     if not api_key:
         return jsonify({'error': 'TomTom API key is not configured on server.'}), 500
@@ -437,14 +569,29 @@ def api_nearby_parking():
         return jsonify({'error': 'Missing lat/lon parameters.'}), 400
 
     try:
+        user_lat = float(lat)
+        user_lon = float(lon)
+        radius_m = int(radius)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid lat/lon/radius parameters.'}), 400
+
+    if radius_m <= 0:
+        return jsonify({'error': 'Radius must be greater than 0.'}), 400
+
+    radius_m = min(radius_m, 50000)
+
+    try:
+        encoded_key = urllib.parse.quote(api_key)
         url = (
             "https://api.tomtom.com/search/2/categorySearch/parking.json"
-            f"?key={urllib.parse.quote(api_key)}"
-            f"&lat={urllib.parse.quote(lat)}"
-            f"&lon={urllib.parse.quote(lon)}"
-            f"&radius={urllib.parse.quote(radius)}"
+            f"?key={encoded_key}"
+            f"&lat={user_lat}"
+            f"&lon={user_lon}"
+            f"&radius={radius_m}"
+            f"&limit=30"
         )
-        with urllib.request.urlopen(url, timeout=15) as response:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Find-A-Spot/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as response:
             data = json.loads(response.read().decode('utf-8'))
         return jsonify(data)
     except Exception as exc:

@@ -48,6 +48,18 @@
       </button>
     </div>
 
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+      <p id="location-status" class="text-sm text-gray-700">
+        Requesting your current location...
+      </p>
+      <button
+        id="nearby-button"
+        class="bg-green-600 text-white rounded-md px-6 py-3 font-semibold hover:bg-green-700 transition"
+      >
+        Search Nearby Parkings
+      </button>
+    </div>
+
     <!-- Map -->
     <div id="map" class="w-full h-[60vh] rounded-md shadow-md mb-6"></div>
 
@@ -96,8 +108,8 @@
     key: apiKey,
     container: "map",
     style: fallbackRasterStyle,
-    center: [75.94298, 22.821053],
-    zoom: 12,
+    center: [0, 0],
+    zoom: 2,
   });
 
   map.addControl(new tt.NavigationControl());
@@ -105,15 +117,30 @@
     console.error("Map rendering error:", event && event.error ? event.error : event);
   });
 
-  let userLocation = { lat: 22.821053, lng: 75.94298 };
+  let userLocation = null;
+  let browserLocation = null;
+  const locationStatus = document.getElementById("location-status");
+  const nearbyButton = document.getElementById("nearby-button");
 
   const marker = new tt.Marker({
     draggable: true,
   })
-    .setLngLat([userLocation.lng, userLocation.lat])
+    .setLngLat([0, 0])
     .addTo(map);
 
+  marker.getElement().style.display = "none";
+
   let parkingMarkers = [];
+
+  const escapeHtml = (str) => {
+    const div = document.createElement("div");
+    div.textContent = str || "";
+    return div.innerHTML;
+  };
+
+  const escapeJsString = (str) => {
+    return (str || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  };
 
   const clearParkingMarkers = () => {
     parkingMarkers.forEach((item) => item.remove());
@@ -123,15 +150,15 @@
   const addParkingMarker = (place) => {
     const name = place.poi?.name || "Unnamed Parking";
     const address = place.address?.freeformAddress || "N/A";
-    const lat = place.position?.lat;
-    const lon = place.position?.lon;
+    const lat = parseFloat(place.position?.lat);
+    const lon = parseFloat(place.position?.lon);
 
-    if (typeof lat !== "number" || typeof lon !== "number") {
-      return;
+    if (isNaN(lat) || isNaN(lon)) {
+      return null;
     }
 
     const popup = new tt.Popup({ offset: 30 }).setHTML(
-      `<div style="font-size:13px;"><strong>${name}</strong><br>${address}</div>`
+      `<div style="font-size:13px; color:#1e293b;"><strong>${escapeHtml(name)}</strong><br>${escapeHtml(address)}<br><button onclick="selectParking('${escapeJsString(name)}', '${escapeJsString(address)}')" class="mt-2 bg-green-600 hover:bg-green-700 text-white text-xs px-2.5 py-1 rounded font-semibold transition">Select Spot</button></div>`
     );
 
     const parkingMarker = new tt.Marker({ color: "#16a34a" })
@@ -140,57 +167,82 @@
       .addTo(map);
 
     parkingMarkers.push(parkingMarker);
+    return parkingMarker;
   };
 
   const fetchNearbyParking = async (lat, lng) => {
-    userLocation = { lat, lng };
+    const numericLat = parseFloat(lat);
+    const numericLng = parseFloat(lng);
+    if (isNaN(numericLat) || isNaN(numericLng)) {
+      return;
+    }
+    userLocation = { lat: numericLat, lng: numericLng };
     const resultsContainer = document.getElementById("results-container");
-    resultsContainer.innerHTML = "";
+    resultsContainer.innerHTML = '<p class="text-center text-gray-500 py-4">Searching for nearby parking...</p>';
     clearParkingMarkers();
 
     let data;
     try {
-      const url = `/api/nearby_parking?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&radius=5000`;
+      const url = `/api/nearby_parking?lat=${encodeURIComponent(numericLat)}&lon=${encodeURIComponent(numericLng)}&radius=10000`;
       const response = await fetch(url);
       data = await response.json();
       if (!response.ok || data.error) {
         throw new Error(data.error || "Unable to fetch nearby parking.");
       }
     } catch (error) {
-      resultsContainer.innerHTML = `<p class="text-center text-red-600">${error.message}</p>`;
+      resultsContainer.innerHTML = `<p class="text-center text-red-600 py-4">${escapeHtml(error.message)}</p>`;
       return;
     }
 
     if (data.results && data.results.length > 0) {
+      resultsContainer.innerHTML = "";
       const bounds = new tt.LngLatBounds();
-      bounds.extend([lng, lat]);
+      bounds.extend([numericLng, numericLat]);
 
       data.results.forEach((place) => {
-        const distance = calculateDistance(lat, lng, place.position.lat, place.position.lon);
-        addParkingMarker(place);
-        bounds.extend([place.position.lon, place.position.lat]);
+        const pLat = parseFloat(place.position?.lat);
+        const pLon = parseFloat(place.position?.lon);
+        if (isNaN(pLat) || isNaN(pLon)) return;
+
+        const distance = typeof place.dist === "number"
+          ? (place.dist / 1000)
+          : calculateDistance(numericLat, numericLng, pLat, pLon);
+
+        const markerInstance = addParkingMarker(place);
+        bounds.extend([pLon, pLat]);
+
+        const safeName = place.poi?.name || "Unnamed Parking";
+        const safeAddress = place.address?.freeformAddress || "N/A";
 
         const resultDiv = document.createElement("div");
-        resultDiv.className = "bg-blue-50 p-4 rounded-lg shadow flex justify-between items-center text-blue-900 font-semibold";
+        resultDiv.className = "bg-blue-50 hover:bg-blue-100 p-4 rounded-lg shadow flex justify-between items-center text-blue-900 font-semibold cursor-pointer transition";
         resultDiv.innerHTML = `
           <div>
-            <strong>${place.poi.name || "Unnamed Parking"}</strong><br>
-            <span class="text-sm text-blue-700">Address: ${place.address.freeformAddress || "N/A"}</span><br>
+            <strong>${escapeHtml(safeName)}</strong><br>
+            <span class="text-sm text-blue-700">Address: ${escapeHtml(safeAddress)}</span><br>
             <span class="text-sm text-blue-700">Distance: ${distance.toFixed(2)} km</span>
           </div>
           <button
-            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-semibold transition"
-            onclick="selectParking('${place.poi.name || "Unnamed Parking"}', '${place.address.freeformAddress || "N/A"}')"
+            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-semibold transition ml-3 flex-shrink-0"
+            onclick="event.stopPropagation(); selectParking('${escapeJsString(safeName)}', '${escapeJsString(safeAddress)}')"
           >
             Select
           </button>
         `;
+
+        resultDiv.addEventListener("click", () => {
+          map.flyTo({ center: [pLon, pLat], zoom: 15 });
+          if (markerInstance) {
+            markerInstance.togglePopup();
+          }
+        });
+
         resultsContainer.appendChild(resultDiv);
       });
 
       map.fitBounds(bounds, { padding: 60, maxZoom: 15 });
     } else {
-      resultsContainer.innerHTML = `<p class="text-center text-gray-500">No parking options found nearby.</p>`;
+      resultsContainer.innerHTML = `<p class="text-center text-gray-500 py-6">No parking options found nearby.</p>`;
     }
   };
 
@@ -208,7 +260,7 @@
     return R * c;
   };
 
-  document.getElementById("search-button").addEventListener("click", async () => {
+  const performSearch = async () => {
     const query = document.getElementById("search-input").value;
     if (query.trim() === "") {
       alert("Please enter a location to search.");
@@ -230,26 +282,113 @@
 
     if (data.results && data.results.length > 0) {
       const location = data.results[0].position;
-      map.flyTo({ center: [location.lon, location.lat], zoom: 14 });
+      marker.getElement().style.display = "";
       marker.setLngLat([location.lon, location.lat]);
+      map.flyTo({ center: [location.lon, location.lat], zoom: 14 });
+      locationStatus.textContent = `Showing parking for "${query.trim()}".`;
       await fetchNearbyParking(location.lat, location.lon);
     } else {
       alert("Location not found. Please try again.");
+    }
+  };
+
+  document.getElementById("search-button").addEventListener("click", performSearch);
+  document.getElementById("search-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      performSearch();
     }
   });
 
   marker.on("dragend", async () => {
     const lngLat = marker.getLngLat();
+    locationStatus.textContent = "Using your selected location on the map.";
     await fetchNearbyParking(lngLat.lat, lngLat.lng);
   });
 
+  nearbyButton.addEventListener("click", async () => {
+    if (!browserLocation) {
+      if (navigator.geolocation) {
+        locationStatus.textContent = "Requesting your current location...";
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            await setUserLocation(latitude, longitude, "Showing parking near your current location.");
+          },
+          (error) => {
+            let message = "Unable to fetch your current location. Please search manually.";
+            if (error.code === error.PERMISSION_DENIED) {
+              message = "Location permission denied. Please allow location access or search manually.";
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              message = "Location unavailable. Please search manually.";
+            } else if (error.code === error.TIMEOUT) {
+              message = "Location request timed out. Please search manually.";
+            }
+            locationStatus.textContent = message;
+            document.getElementById("results-container").innerHTML = `<p class="text-center text-gray-500 py-6">${message}</p>`;
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+        return;
+      }
+      locationStatus.textContent = "Current location is unavailable. Please allow location access or search manually.";
+      return;
+    }
+    marker.getElement().style.display = "";
+    marker.setLngLat([browserLocation.lng, browserLocation.lat]);
+    map.flyTo({ center: [browserLocation.lng, browserLocation.lat], zoom: 14 });
+    locationStatus.textContent = "Showing parking near your current location.";
+    await fetchNearbyParking(browserLocation.lat, browserLocation.lng);
+  });
+
+  const setUserLocation = async (lat, lng, message) => {
+    userLocation = { lat, lng };
+    browserLocation = { lat, lng };
+    marker.getElement().style.display = "";
+    marker.setLngLat([lng, lat]);
+    map.flyTo({ center: [lng, lat], zoom: 14 });
+    locationStatus.textContent = message;
+    await fetchNearbyParking(lat, lng);
+  };
+
+  const initializeFromBrowserLocation = () => {
+    if (!navigator.geolocation) {
+      locationStatus.textContent = "Geolocation is not supported in this browser. Please search manually.";
+      document.getElementById("results-container").innerHTML = '<p class="text-center text-gray-500 py-6">Geolocation is not supported in this browser. Please search manually using the search bar.</p>';
+      return;
+    }
+
+    locationStatus.textContent = "Requesting your current location...";
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        await setUserLocation(latitude, longitude, "Showing parking near your current location.");
+      },
+      (error) => {
+        let message = "Unable to fetch your current location. Please search manually.";
+        if (error.code === error.PERMISSION_DENIED) {
+          message = "Location permission denied. Please search manually or drag the map marker.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message = "Location unavailable. Please search manually or drag the map marker.";
+        } else if (error.code === error.TIMEOUT) {
+          message = "Location request timed out. Please search manually or drag the map marker.";
+        }
+        locationStatus.textContent = message;
+        document.getElementById("results-container").innerHTML = `<p class="text-center text-gray-500 py-6">${message}</p>`;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   function selectParking(name, address) {
-  const url = `/confirm_slot?name=${encodeURIComponent(name)}&address=${encodeURIComponent(address)}`;
-  window.location.href = url;
-}
+    const url = `/confirm_slot?name=${encodeURIComponent(name)}&address=${encodeURIComponent(address)}`;
+    window.location.href = url;
+  }
 
-
-  // Initial fetch for default location
-  fetchNearbyParking(userLocation.lat, userLocation.lng);
+  initializeFromBrowserLocation();
 </script>
 {% endblock %}
