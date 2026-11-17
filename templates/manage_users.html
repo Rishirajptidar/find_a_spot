@@ -1,77 +1,833 @@
 {% extends 'base.html' %}
 
-{% block title %}Manage Users - Find-A-Spot{% endblock %}
+{% block title %}Manage Users - Find-A-Spot Admin{% endblock %}
 
 {% block content %}
-<div class="container my-16">
-  <h1 class="text-4xl font-extrabold text-center text-blue-700 mb-10">Manage All Registered Users</h1>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" style="grid-auto-rows: 1fr">
-    {% for user in users %}
-    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500 hover:border-indigo-600 flex flex-col h-full">
-      
-      <div class="mb-3 flex-grow">
-        <h2 class="text-xl font-semibold text-blue-800 truncate">{{ user[2] }}</h2>
-        <p class="text-sm text-gray-600 truncate">{{ user[3] }}</p>
-        <p class="text-xs text-gray-500 mt-1">{{ user[1]|capitalize }} | Verified: {{ 'Yes' if user[4] else 'No' }}</p>
-      </div>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {% set user_id = user[0] %}
-
-      <!-- Profile Section -->
-      <div class="mb-3 flex-grow-0">
-        {% for profile in profiles %}
-          {% if profile[1] == user_id %}
-          <div class="text-sm text-gray-700 space-y-1">
-            <p class="truncate"><strong>📞</strong> {{ profile[3] or 'Not provided' }}</p>
-            <p class="truncate"><strong>🚗</strong> {{ profile[4] or 'Not provided' }}</p>
-            <p class="truncate"><strong>🏠</strong> {{ (profile[7] or '')[:20] }}{% if profile[7] and profile[7]|length > 20 %}...{% endif %}</p>
-          </div>
-          {% endif %}
-        {% endfor %}
-      </div>
-
-      <!-- Bookings & Payments Container -->
-      <div class="mb-4 flex-grow">
-        <!-- Bookings -->
-        <div class="text-xs text-gray-600 mb-2">
-          <strong class="text-yellow-600">Bookings:</strong>
-          {% set user_bookings = [] %}
-          {% for booking in bookings %}
-            {% if booking[1] == user_id %}
-              {% set _ = user_bookings.append(booking) %}
-              <p class="truncate">📌 {{ booking[2] }} | Slot {{ booking[4] }}</p>
-            {% endif %}
-          {% endfor %}
-          {% if user_bookings|length == 0 %}
-            <p class="text-gray-400">No bookings</p>
-          {% endif %}
-        </div>
-
-        <!-- Payments -->
-        <div class="text-xs text-gray-600">
-          <strong class="text-purple-600">Payments:</strong>
-          {% set user_payments = [] %}
-          {% for payment in payments %}
-            {% if payment[1] == user_id %}
-              {% set _ = user_payments.append(payment) %}
-              <p class="truncate">₹{{ payment[3] }} - {{ payment[4] }} - {{ payment[5] }}</p>
-            {% endif %}
-          {% endfor %}
-          {% if user_payments|length == 0 %}
-            <p class="text-gray-400">No payments</p>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- Delete Button -->
-      <form action="{{ url_for('delete_user', user_id=user_id) }}" method="POST" class="mt-auto">
-        <button class="w-full bg-red-600 text-white py-2 rounded-md hover:bg-red-700 text-sm font-semibold transition">
-          Delete User
-        </button>
-      </form>
+  <!-- Page Header -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-gray-200">
+    <div>
+      <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+        <span class="p-2.5 bg-blue-600 text-white rounded-xl shadow-md text-xl">
+          <i class="fas fa-users-cog"></i>
+        </span>
+        Manage All Users
+      </h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Overview of all registered users, customer profiles, parking bookings, and transactions.
+      </p>
     </div>
-    {% endfor %}
+    <div class="mt-4 md:mt-0 flex items-center gap-3">
+      <span class="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+        <i class="fas fa-user-shield mr-1.5"></i> Admin Control Panel
+      </span>
+    </div>
+  </div>
+
+  <!-- Quick Stats Cards -->
+  {% set total_users = user_list|length %}
+  {% set total_customers = user_list|selectattr('role', 'equalto', 'customer')|list|length %}
+  {% set total_admins = user_list|selectattr('role', 'equalto', 'admin')|list|length %}
+  {% set total_verified = user_list|selectattr('is_verified', 'equalto', true)|list|length %}
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Users</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ total_users }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+          <i class="fas fa-users"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Customers</p>
+          <p class="text-2xl font-bold text-emerald-600 mt-1">{{ total_customers }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+          <i class="fas fa-user"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Admins</p>
+          <p class="text-2xl font-bold text-purple-600 mt-1">{{ total_admins }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-lg">
+          <i class="fas fa-shield-alt"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Verified</p>
+          <p class="text-2xl font-bold text-teal-600 mt-1">{{ total_verified }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-lg">
+          <i class="fas fa-check-circle"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Controls -->
+  <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="relative w-full md:w-80">
+      <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+        <i class="fas fa-search"></i>
+      </span>
+      <input
+        type="text"
+        id="userSearchInput"
+        placeholder="Search by name, email, vehicle..."
+        class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      />
+    </div>
+
+    <div class="flex items-center gap-3 w-full md:w-auto">
+      <select
+        id="roleFilter"
+        class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+      >
+        <option value="all">All Roles</option>
+        <option value="customer">Customers Only</option>
+        <option value="admin">Admins Only</option>
+      </select>
+
+      <select
+        id="statusFilter"
+        class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+      >
+        <option value="all">All Status</option>
+        <option value="verified">Verified Only</option>
+        <option value="unverified">Unverified Only</option>
+      </select>
+
+      <span id="filteredCount" class="text-xs text-gray-500 font-medium whitespace-nowrap">
+        Showing {{ total_users }} users
+      </span>
+    </div>
+  </div>
+
+  <!-- Users Table (Single Line Per User) -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-left text-sm" id="usersTable">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="py-3.5 pl-6 pr-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              User
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Email
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Role
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Vehicle & Phone
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Activity
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Status
+            </th>
+            <th scope="col" class="py-3.5 pl-3 pr-6 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 bg-white" id="usersTableBody">
+          {% for u in user_list %}
+          <tr
+            class="user-row hover:bg-blue-50/50 transition cursor-pointer"
+            data-user-id="{{ u.user_id }}"
+            data-name="{{ u.name|lower }}"
+            data-email="{{ u.email|lower }}"
+            data-role="{{ u.role|lower }}"
+            data-verified="{{ 'verified' if u.is_verified else 'unverified' }}"
+            data-vehicle="{{ (u.profile.vehicle_no or '')|lower }}"
+            data-phone="{{ (u.profile.phone_no or '')|lower }}"
+            onclick="openUserModal({{ u.user_id }})"
+          >
+            <!-- User Name + Avatar (One line) -->
+            <td class="py-3.5 pl-6 pr-3 whitespace-nowrap">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0 {{ 'bg-purple-100 text-purple-700' if u.role == 'admin' else 'bg-blue-100 text-blue-700' }}">
+                  {{ (u.name or 'U')[:1]|upper }}
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    class="font-semibold text-blue-700 hover:text-blue-900 hover:underline text-left text-sm flex items-center gap-1.5 focus:outline-none"
+                    onclick="event.stopPropagation(); openUserModal({{ u.user_id }})"
+                  >
+                    <span>{{ u.name }}</span>
+                    <i class="fas fa-external-link-alt text-[10px] text-gray-400"></i>
+                  </button>
+                  <p class="text-xs text-gray-400">ID: #{{ u.user_id }}</p>
+                </div>
+              </div>
+            </td>
+
+            <!-- Email (One line) -->
+            <td class="px-3 py-3.5 whitespace-nowrap text-gray-600 font-mono text-xs">
+              <div class="flex items-center gap-1.5">
+                <i class="fas fa-envelope text-gray-400"></i>
+                <span>{{ u.email }}</span>
+              </div>
+            </td>
+
+            <!-- Role (One line) -->
+            <td class="px-3 py-3.5 whitespace-nowrap">
+              {% if u.role == 'admin' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                  <i class="fas fa-shield-alt mr-1"></i> Admin
+                </span>
+              {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                  <i class="fas fa-user mr-1"></i> Customer
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Vehicle & Phone (One line) -->
+            <td class="px-3 py-3.5 whitespace-nowrap text-xs text-gray-700">
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                  <i class="fas fa-car text-gray-400"></i>
+                  <span class="font-semibold uppercase tracking-wider {{ 'text-gray-900' if u.profile.vehicle_no and u.profile.vehicle_no != 'N/A' else 'text-gray-400' }}">
+                    {{ u.profile.vehicle_no if u.profile.vehicle_no and u.profile.vehicle_no != 'N/A' else 'No vehicle' }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 text-gray-500">
+                  <i class="fas fa-phone text-gray-400"></i>
+                  <span>{{ u.profile.phone_no if u.profile.phone_no and u.profile.phone_no != 'N/A' else 'No phone' }}</span>
+                </div>
+              </div>
+            </td>
+
+            <!-- Activity (One line) -->
+            <td class="px-3 py-3.5 whitespace-nowrap text-xs">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                  <i class="fas fa-calendar-check mr-1 text-amber-600"></i> {{ u.booking_count }}
+                </span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <i class="fas fa-rupee-sign mr-0.5 text-emerald-600"></i> {{ u.total_spent|int }}
+                </span>
+              </div>
+            </td>
+
+            <!-- Verification Status (One line) -->
+            <td class="px-3 py-3.5 whitespace-nowrap">
+              {% if u.is_verified %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <i class="fas fa-check mr-1 text-[10px]"></i> Verified
+                </span>
+              {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  <i class="fas fa-clock mr-1 text-[10px]"></i> Pending
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Actions (One line) -->
+            <td class="py-3.5 pl-3 pr-6 whitespace-nowrap text-right">
+              <div class="flex items-center justify-end gap-2" onclick="event.stopPropagation()">
+                <!-- View Button -->
+                <button
+                  type="button"
+                  onclick="openUserModal({{ u.user_id }})"
+                  class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  title="View full details"
+                >
+                  <i class="fas fa-eye mr-1 text-blue-600"></i> Details
+                </button>
+
+                <!-- Delete Button -->
+                {% if u.email == current_admin_email %}
+                  <span class="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 rounded-md cursor-not-allowed" title="Your active admin account cannot be deleted">
+                    <i class="fas fa-user-lock mr-1"></i> You
+                  </span>
+                {% else %}
+                  <button
+                    type="button"
+                    onclick="confirmDeleteUser({{ u.user_id }}, '{{ u.name|replace('\'', '\\\'') }}', '{{ u.email|replace('\'', '\\\'') }}')"
+                    class="inline-flex items-center px-2.5 py-1.5 border border-red-200 shadow-sm text-xs font-medium rounded-md text-red-600 bg-red-50 hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition"
+                    title="Delete user"
+                  >
+                    <i class="fas fa-trash-alt mr-1"></i> Delete
+                  </button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State when filtering returns nothing -->
+    <div id="noResultsState" class="hidden py-12 text-center">
+      <div class="w-16 h-16 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-3 text-2xl">
+        <i class="fas fa-user-slash"></i>
+      </div>
+      <h3 class="text-base font-semibold text-gray-800">No matching users found</h3>
+      <p class="text-sm text-gray-500 mt-1">Try adjusting your search query or filter criteria.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ========================================== -->
+<!-- FULL USER DETAILS MODAL (Populated on click) -->
+<!-- ========================================== -->
+<div id="userDetailsModal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" onclick="closeUserModal()"></div>
+
+  <div class="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-4xl border border-gray-100">
+
+      <!-- Modal Header -->
+      <div class="bg-gradient-to-r from-blue-700 to-indigo-700 px-6 py-6 text-white flex items-start justify-between">
+        <div class="flex items-center gap-4">
+          <div id="modalAvatar" class="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md text-white font-extrabold text-2xl flex items-center justify-center shadow-inner border border-white/30">
+            U
+          </div>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h2 id="modalUserName" class="text-2xl font-bold tracking-tight">User Full Details</h2>
+              <span id="modalRoleBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/30">
+                Customer
+              </span>
+              <span id="modalVerifiedBadge" class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/90 text-white">
+                Verified
+              </span>
+            </div>
+            <p id="modalUserEmail" class="text-sm text-blue-100 mt-1 flex items-center gap-1.5 font-mono">
+              <i class="fas fa-envelope text-xs"></i> user@example.com
+            </p>
+            <p id="modalUserId" class="text-xs text-blue-200 mt-0.5">User ID: #1</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick="closeUserModal()"
+          class="rounded-lg p-2 text-blue-100 hover:text-white hover:bg-white/10 transition focus:outline-none"
+        >
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+
+      <!-- Quick Summary Stats Bar -->
+      <div class="bg-blue-50/70 border-b border-blue-100 px-6 py-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div>
+          <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Bookings</p>
+          <p id="modalStatBookings" class="text-lg font-bold text-gray-800 mt-0.5">0</p>
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Completed</p>
+          <p id="modalStatCompleted" class="text-lg font-bold text-emerald-600 mt-0.5">0</p>
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Total Paid</p>
+          <p id="modalStatPaid" class="text-lg font-bold text-blue-700 mt-0.5">₹0.00</p>
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Active Bookings</p>
+          <p id="modalStatActive" class="text-lg font-bold text-amber-600 mt-0.5">0</p>
+        </div>
+      </div>
+
+      <!-- Modal Tabs Navigation -->
+      <div class="border-b border-gray-200 px-6 bg-white">
+        <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+          <button
+            type="button"
+            onclick="switchModalTab('profile')"
+            id="tabBtnProfile"
+            class="tab-btn py-3 px-1 border-b-2 font-semibold text-sm border-blue-600 text-blue-600 transition"
+          >
+            <i class="fas fa-id-card mr-2"></i> Profile & Vehicle
+          </button>
+          <button
+            type="button"
+            onclick="switchModalTab('bookings')"
+            id="tabBtnBookings"
+            class="tab-btn py-3 px-1 border-b-2 font-semibold text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition"
+          >
+            <i class="fas fa-parking mr-2"></i> Bookings History (<span id="modalTabBookingsCount">0</span>)
+          </button>
+          <button
+            type="button"
+            onclick="switchModalTab('payments')"
+            id="tabBtnPayments"
+            class="tab-btn py-3 px-1 border-b-2 font-semibold text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition"
+          >
+            <i class="fas fa-credit-card mr-2"></i> Payments (<span id="modalTabPaymentsCount">0</span>)
+          </button>
+        </nav>
+      </div>
+
+      <!-- Modal Tab Contents -->
+      <div class="p-6 max-h-[60vh] overflow-y-auto">
+
+        <!-- 1. Profile Tab -->
+        <div id="modalTabProfile" class="space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Contact & Vehicle Info -->
+            <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+              <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <i class="fas fa-car text-blue-600"></i> Vehicle & Contact
+              </h4>
+              <dl class="space-y-2.5 text-sm">
+                <div class="flex justify-between">
+                  <dt class="text-gray-500">Phone Number:</dt>
+                  <dd id="modalProfilePhone" class="font-medium text-gray-900">N/A</dd>
+                </div>
+                <div class="flex justify-between">
+                  <dt class="text-gray-500">Vehicle Registration:</dt>
+                  <dd id="modalProfileVehicle" class="font-bold uppercase tracking-wider text-blue-700">N/A</dd>
+                </div>
+                <div class="flex justify-between">
+                  <dt class="text-gray-500">Age / Gender:</dt>
+                  <dd id="modalProfileAgeGender" class="font-medium text-gray-900">N/A</dd>
+                </div>
+              </dl>
+            </div>
+
+            <!-- Location & Address Info -->
+            <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+              <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <i class="fas fa-map-marker-alt text-red-500"></i> Location & Address
+              </h4>
+              <dl class="space-y-2.5 text-sm">
+                <div class="flex justify-between">
+                  <dt class="text-gray-500">City / State:</dt>
+                  <dd id="modalProfileCityState" class="font-medium text-gray-900">N/A</dd>
+                </div>
+                <div>
+                  <dt class="text-gray-500 text-xs mb-1">Full Address:</dt>
+                  <dd id="modalProfileAddress" class="font-medium text-gray-900 bg-white p-2 rounded border border-gray-200 text-xs leading-relaxed">N/A</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Bookings Tab -->
+        <div id="modalTabBookings" class="hidden">
+          <div id="modalBookingsContainer" class="space-y-3">
+            <!-- Bookings dynamically rendered here -->
+          </div>
+          <div id="modalNoBookings" class="hidden py-8 text-center text-gray-500">
+            <i class="fas fa-calendar-times text-3xl text-gray-300 mb-2"></i>
+            <p>No parking bookings found for this user.</p>
+          </div>
+        </div>
+
+        <!-- 3. Payments Tab -->
+        <div id="modalTabPayments" class="hidden">
+          <div id="modalPaymentsContainer" class="space-y-3">
+            <!-- Payments dynamically rendered here -->
+          </div>
+          <div id="modalNoPayments" class="hidden py-8 text-center text-gray-500">
+            <i class="fas fa-receipt text-3xl text-gray-300 mb-2"></i>
+            <p>No payment records found for this user.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-200">
+        <div>
+          <button
+            type="button"
+            id="modalDeleteBtn"
+            class="inline-flex items-center px-4 py-2 border border-red-300 shadow-sm text-sm font-semibold rounded-lg text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 transition"
+          >
+            <i class="fas fa-trash-alt mr-2"></i> Delete This User
+          </button>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            onclick="closeUserModal()"
+            class="px-5 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold text-sm transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
+
+<!-- ========================================== -->
+<!-- DELETE CONFIRMATION MODAL -->
+<!-- ========================================== -->
+<div id="deleteConfirmModal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="delete-title" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" onclick="closeDeleteConfirmModal()"></div>
+
+  <div class="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-gray-100 p-6">
+      <div class="flex items-center gap-4 mb-4">
+        <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xl flex-shrink-0">
+          <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-gray-900" id="delete-title">Confirm Delete User</h3>
+          <p class="text-xs text-gray-500">This action is permanent and cannot be undone.</p>
+        </div>
+      </div>
+
+      <div class="bg-red-50 border border-red-200 rounded-xl p-3.5 mb-5 text-sm text-red-800">
+        <p>Are you sure you want to delete <strong id="deleteConfirmUserName">User</strong>?</p>
+        <p class="text-xs text-red-600 mt-1">
+          Email: <span id="deleteConfirmUserEmail" class="font-mono">email@example.com</span>
+        </p>
+        <p class="text-xs text-red-500 mt-2">
+          * This will delete their account, profile, all active/completed bookings, and payment records.
+        </p>
+      </div>
+
+      <form id="deleteUserForm" method="POST" action="">
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            onclick="closeDeleteConfirmModal()"
+            class="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm shadow-sm transition flex items-center gap-2"
+          >
+            <i class="fas fa-trash-alt"></i> Yes, Delete User
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Client-side Interactive Logic -->
+<script>
+  // User data passed directly from backend
+  const usersData = {{ user_list|tojson }};
+  const currentAdminEmail = "{{ current_admin_email|e }}";
+
+  let activeModalUserId = null;
+
+  // Search and Filter Elements
+  const searchInput = document.getElementById('userSearchInput');
+  const roleFilter = document.getElementById('roleFilter');
+  const statusFilter = document.getElementById('statusFilter');
+  const userRows = document.querySelectorAll('.user-row');
+  const filteredCountEl = document.getElementById('filteredCount');
+  const noResultsState = document.getElementById('noResultsState');
+
+  function applyFilters() {
+    const query = (searchInput.value || '').trim().toLowerCase();
+    const selectedRole = roleFilter.value;
+    const selectedStatus = statusFilter.value;
+
+    let visibleCount = 0;
+
+    userRows.forEach(row => {
+      const name = row.getAttribute('data-name') || '';
+      const email = row.getAttribute('data-email') || '';
+      const vehicle = row.getAttribute('data-vehicle') || '';
+      const phone = row.getAttribute('data-phone') || '';
+      const role = row.getAttribute('data-role') || '';
+      const verified = row.getAttribute('data-verified') || '';
+
+      const matchesSearch = !query ||
+        name.includes(query) ||
+        email.includes(query) ||
+        vehicle.includes(query) ||
+        phone.includes(query);
+
+      const matchesRole = (selectedRole === 'all') || (role === selectedRole);
+      const matchesStatus = (selectedStatus === 'all') || (verified === selectedStatus);
+
+      if (matchesSearch && matchesRole && matchesStatus) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    filteredCountEl.textContent = `Showing ${visibleCount} of ${userRows.length} users`;
+    if (visibleCount === 0) {
+      noResultsState.classList.remove('hidden');
+    } else {
+      noResultsState.classList.add('hidden');
+    }
+  }
+
+  searchInput.addEventListener('input', applyFilters);
+  roleFilter.addEventListener('change', applyFilters);
+  statusFilter.addEventListener('change', applyFilters);
+
+  // Modal Handling
+  function openUserModal(userId) {
+    const user = usersData.find(u => u.user_id === userId);
+    if (!user) return;
+
+    activeModalUserId = userId;
+
+    // Header Details
+    document.getElementById('modalAvatar').textContent = (user.name || 'U').charAt(0).toUpperCase();
+    document.getElementById('modalUserName').textContent = user.name || 'Unnamed User';
+    document.getElementById('modalUserEmail').innerHTML = `<i class="fas fa-envelope text-xs"></i> ${escapeHtml(user.email)}`;
+    document.getElementById('modalUserId').textContent = `User ID: #${user.user_id}`;
+
+    // Role badge
+    const roleBadge = document.getElementById('modalRoleBadge');
+    if (user.role === 'admin') {
+      roleBadge.textContent = 'Admin';
+      roleBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/80 text-white border border-purple-300/40';
+    } else {
+      roleBadge.textContent = 'Customer';
+      roleBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/30';
+    }
+
+    // Verified badge
+    const verifiedBadge = document.getElementById('modalVerifiedBadge');
+    if (user.is_verified) {
+      verifiedBadge.textContent = 'Verified';
+      verifiedBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/90 text-white';
+    } else {
+      verifiedBadge.textContent = 'Pending Verification';
+      verifiedBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/90 text-white';
+    }
+
+    // Stats bar
+    const bookings = user.bookings || [];
+    const payments = user.payments || [];
+    const completedBookings = bookings.filter(b => b.status === 'completed').length;
+    const activeBookings = bookings.filter(b => b.status === 'confirmed').length;
+
+    document.getElementById('modalStatBookings').textContent = bookings.length;
+    document.getElementById('modalStatCompleted').textContent = completedBookings;
+    document.getElementById('modalStatPaid').textContent = `₹${(user.total_spent || 0).toFixed(2)}`;
+    document.getElementById('modalStatActive').textContent = activeBookings;
+
+    // Tab Counts
+    document.getElementById('modalTabBookingsCount').textContent = bookings.length;
+    document.getElementById('modalTabPaymentsCount').textContent = payments.length;
+
+    // Profile Details
+    const profile = user.profile || {};
+    document.getElementById('modalProfilePhone').textContent = profile.phone_no || 'Not provided';
+    document.getElementById('modalProfileVehicle').textContent = profile.vehicle_no || 'Not provided';
+    
+    const ageGenderParts = [];
+    if (profile.age && profile.age !== 'N/A') ageGenderParts.push(`${profile.age} yrs`);
+    if (profile.gender && profile.gender !== 'N/A') ageGenderParts.push(profile.gender);
+    document.getElementById('modalProfileAgeGender').textContent = ageGenderParts.length ? ageGenderParts.join(' • ') : 'Not provided';
+
+    const cityStateParts = [];
+    if (profile.city && profile.city !== 'N/A') cityStateParts.push(profile.city);
+    if (profile.state && profile.state !== 'N/A') cityStateParts.push(profile.state);
+    document.getElementById('modalProfileCityState').textContent = cityStateParts.length ? cityStateParts.join(', ') : 'Not provided';
+
+    document.getElementById('modalProfileAddress').textContent = profile.address && profile.address !== 'N/A' ? profile.address : 'No street address provided.';
+
+    // Populate Bookings List
+    const bookingsContainer = document.getElementById('modalBookingsContainer');
+    const noBookingsEl = document.getElementById('modalNoBookings');
+    bookingsContainer.innerHTML = '';
+
+    if (bookings.length === 0) {
+      noBookingsEl.classList.remove('hidden');
+    } else {
+      noBookingsEl.classList.add('hidden');
+      bookings.forEach(b => {
+        let statusClass = 'bg-gray-100 text-gray-700 border-gray-200';
+        let statusIcon = 'fa-info-circle';
+        if (b.status === 'completed') {
+          statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+          statusIcon = 'fa-check-circle';
+        } else if (b.status === 'confirmed') {
+          statusClass = 'bg-blue-50 text-blue-700 border-blue-200';
+          statusIcon = 'fa-clock';
+        } else if (b.status === 'cancelled') {
+          statusClass = 'bg-red-50 text-red-700 border-red-200';
+          statusIcon = 'fa-times-circle';
+        }
+
+        const div = document.createElement('div');
+        div.className = 'p-4 rounded-xl border border-gray-200 bg-white hover:border-blue-300 transition shadow-sm';
+        div.innerHTML = `
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+            <div>
+              <span class="text-xs font-bold text-blue-800">Booking #${b.booking_id}</span>
+              <h5 class="text-sm font-semibold text-gray-900">${escapeHtml(b.parking_name)}</h5>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-1 rounded-full text-xs font-semibold border ${statusClass} flex items-center gap-1">
+                <i class="fas ${statusIcon} text-[10px]"></i> ${escapeHtml(b.status.toUpperCase())}
+              </span>
+              <span class="text-sm font-bold text-gray-900">₹${b.amount.toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+            <div>
+              <span class="text-gray-400 block">Slot Number:</span>
+              <strong class="text-gray-800">Slot ${b.slot_no}</strong>
+            </div>
+            <div>
+              <span class="text-gray-400 block">Entry Time:</span>
+              <span class="text-gray-800 font-mono">${escapeHtml(b.entry_time)}</span>
+            </div>
+            <div>
+              <span class="text-gray-400 block">Exit Time:</span>
+              <span class="text-gray-800 font-mono">${escapeHtml(b.exit_time)}</span>
+            </div>
+          </div>
+        `;
+        bookingsContainer.appendChild(div);
+      });
+    }
+
+    // Populate Payments List
+    const paymentsContainer = document.getElementById('modalPaymentsContainer');
+    const noPaymentsEl = document.getElementById('modalNoPayments');
+    paymentsContainer.innerHTML = '';
+
+    if (payments.length === 0) {
+      noPaymentsEl.classList.remove('hidden');
+    } else {
+      noPaymentsEl.classList.add('hidden');
+      payments.forEach(p => {
+        const isSuccess = String(p.status).toLowerCase() === 'success';
+        const statusBadge = isSuccess
+          ? '<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Success</span>'
+          : '<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">Pending</span>';
+
+        const div = document.createElement('div');
+        div.className = 'p-3.5 rounded-xl border border-gray-200 bg-white flex items-center justify-between gap-4 text-xs';
+        div.innerHTML = `
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg ${isSuccess ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} flex items-center justify-center text-sm font-bold">
+              <i class="fas fa-receipt"></i>
+            </div>
+            <div>
+              <p class="font-semibold text-gray-800 text-sm">Payment #${p.payment_id} <span class="text-gray-400 font-normal">(Booking #${p.booking_id})</span></p>
+              <p class="text-gray-500 font-mono">${escapeHtml(p.paid_at)} • via ${escapeHtml(p.method)}</p>
+            </div>
+          </div>
+          <div class="text-right flex items-center gap-3">
+            <span class="text-sm font-bold text-gray-900">₹${p.amount.toFixed(2)}</span>
+            ${statusBadge}
+          </div>
+        `;
+        paymentsContainer.appendChild(div);
+      });
+    }
+
+    // Configure Delete Button in Modal
+    const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+    if (user.email === currentAdminEmail) {
+      modalDeleteBtn.disabled = true;
+      modalDeleteBtn.className = 'inline-flex items-center px-4 py-2 border border-gray-200 shadow-sm text-sm font-medium rounded-lg text-gray-400 bg-gray-100 cursor-not-allowed';
+      modalDeleteBtn.innerHTML = '<i class="fas fa-user-lock mr-2"></i> Current Active Admin';
+      modalDeleteBtn.onclick = null;
+    } else {
+      modalDeleteBtn.disabled = false;
+      modalDeleteBtn.className = 'inline-flex items-center px-4 py-2 border border-red-300 shadow-sm text-sm font-semibold rounded-lg text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 transition';
+      modalDeleteBtn.innerHTML = '<i class="fas fa-trash-alt mr-2"></i> Delete This User';
+      modalDeleteBtn.onclick = () => {
+        closeUserModal();
+        confirmDeleteUser(user.user_id, user.name, user.email);
+      };
+    }
+
+    // Reset to profile tab by default
+    switchModalTab('profile');
+
+    // Open Modal
+    document.getElementById('userDetailsModal').classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  }
+
+  function closeUserModal() {
+    document.getElementById('userDetailsModal').classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+    activeModalUserId = null;
+  }
+
+  function switchModalTab(tabName) {
+    const tabs = ['profile', 'bookings', 'payments'];
+    tabs.forEach(t => {
+      const content = document.getElementById(`modalTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      if (t === tabName) {
+        content.classList.remove('hidden');
+        btn.className = 'tab-btn py-3 px-1 border-b-2 font-semibold text-sm border-blue-600 text-blue-600 transition';
+      } else {
+        content.classList.add('hidden');
+        btn.className = 'tab-btn py-3 px-1 border-b-2 font-semibold text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition';
+      }
+    });
+  }
+
+  // Delete Confirmation Modal Handling
+  function confirmDeleteUser(userId, userName, userEmail) {
+    document.getElementById('deleteConfirmUserName').textContent = userName || 'this user';
+    document.getElementById('deleteConfirmUserEmail').textContent = userEmail || '';
+    document.getElementById('deleteUserForm').action = `/admin/delete_user/${userId}`;
+
+    document.getElementById('deleteConfirmModal').classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  }
+
+  function closeDeleteConfirmModal() {
+    document.getElementById('deleteConfirmModal').classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+  }
+
+  // Keyboard accessibility (ESC key to close modals)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const userModal = document.getElementById('userDetailsModal');
+      const deleteModal = document.getElementById('deleteConfirmModal');
+      if (!deleteModal.classList.contains('hidden')) {
+        closeDeleteConfirmModal();
+      } else if (!userModal.classList.contains('hidden')) {
+        closeUserModal();
+      }
+    }
+  });
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+</script>
 {% endblock %}

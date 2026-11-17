@@ -885,20 +885,156 @@ def add_parking():
 
 
 @app.route('/view_parking_lots')
+@app.route('/admin/view_parking_lots')
 def view_parking_lots():
     if 'user' not in session or session.get('role') != 'admin':
-        flash('Please login as a admin to view parking lots.', 'warning')
+        flash('Please login as an admin to view parking lots.', 'warning')
         return redirect(url_for('login'))
 
     cursor = mysql.connection.cursor()
     cursor.execute("""
-        SELECT ID, Name, Address, Coordinates, Price_Per_Hour, Type, Contact_number, capacity
+        SELECT ID, Name, Address, Coordinates, Price_Per_Hour, Type, Contact_number, Capacity, parking_id, is_active
         FROM parking_lots
+        ORDER BY ID DESC
     """)
-    parking_lots = cursor.fetchall()
+    rows = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT parking_id,
+               COUNT(*) AS total_slots,
+               SUM(CASE WHEN is_occupied = 1 THEN 1 ELSE 0 END) AS occupied_slots
+        FROM real_time_parking_info
+        GROUP BY parking_id
+    """)
+    occ_map = {}
+    for r in cursor.fetchall():
+        occ_map[r[0]] = {'total': r[1], 'occupied': int(r[2] or 0)}
+
     cursor.close()
 
+    parking_lots = []
+    for r in rows:
+        pid = r[8]
+        occ_info = occ_map.get(pid, {'total': r[7] or 0, 'occupied': 0})
+        parking_lots.append({
+            'id': r[0],
+            'name': r[1] or 'Unnamed Lot',
+            'address': r[2] or 'N/A',
+            'coordinates': r[3] or 'N/A',
+            'price_per_hour': float(r[4] or 0.0),
+            'type': r[5] or 'Public',
+            'contact_number': r[6] or 'N/A',
+            'capacity': int(r[7] or 0),
+            'parking_id': pid or str(r[0]),
+            'is_active': bool(r[9] if r[9] is not None else 1),
+            'occupied': occ_info['occupied']
+        })
+
     return render_template('view_parking_lots.html', parking_lots=parking_lots)
+
+
+@app.route('/admin/edit_parking/<int:id>', methods=['POST'])
+def edit_parking(id):
+    if 'user' not in session or session.get('role') != 'admin':
+        flash('Access denied. Admins only.', 'danger')
+        return redirect(url_for('login'))
+
+    name = request.form.get('name', '').strip()
+    address = request.form.get('address', '').strip()
+    coordinates = request.form.get('coordinates', '').strip()
+    capacity = request.form.get('capacity', '0').strip()
+    price_per_hour = request.form.get('price_per_hour', '0.00').strip()
+    type_ = request.form.get('type', 'Public').strip()
+    contact_number = request.form.get('contact_number', '').strip()
+
+    if not name:
+        flash('Parking lot name cannot be empty.', 'danger')
+        return redirect(url_for('view_parking_lots'))
+
+    try:
+        capacity_int = int(capacity)
+        price_float = float(price_per_hour)
+        if capacity_int <= 0:
+            raise ValueError()
+    except ValueError:
+        flash('Please provide valid positive numbers for capacity and price per hour.', 'danger')
+        return redirect(url_for('view_parking_lots'))
+
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT parking_id FROM parking_lots WHERE ID = %s", (id,))
+    row = cursor.fetchone()
+    if not row:
+        cursor.close()
+        flash('Parking lot not found.', 'danger')
+        return redirect(url_for('view_parking_lots'))
+
+    parking_id = row[0]
+
+    try:
+        cursor.execute("""
+            UPDATE parking_lots
+            SET Name = %s, Address = %s, Coordinates = %s, Capacity = %s,
+                Price_Per_Hour = %s, Type = %s, Contact_number = %s
+            WHERE ID = %s
+        """, (name, address, coordinates, capacity_int, price_float, type_, contact_number, id))
+        mysql.connection.commit()
+        flash(f"Parking lot '{name}' updated successfully!", 'success')
+    except Exception as exc:
+        mysql.connection.rollback()
+        app.logger.error(f"Error updating parking lot {id}: {exc}")
+        flash(f"Error updating parking lot: {exc}", 'danger')
+    finally:
+        cursor.close()
+
+    # Sync real_time slots if capacity changed
+    if parking_id:
+        try:
+            _ensure_realtime_slots_for_parking(parking_id)
+        except Exception as exc:
+            app.logger.warning(f"Could not sync real-time slots for {parking_id}: {exc}")
+
+    return redirect(url_for('view_parking_lots'))
+
+
+@app.route('/admin/delete_parking/<int:id>', methods=['POST'])
+def delete_parking(id):
+    if 'user' not in session or session.get('role') != 'admin':
+        flash('Access denied. Admins only.', 'danger')
+        return redirect(url_for('login'))
+
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT parking_id, Name FROM parking_lots WHERE ID = %s", (id,))
+    lot = cursor.fetchone()
+    if not lot:
+        cursor.close()
+        flash('Parking lot not found.', 'danger')
+        return redirect(url_for('view_parking_lots'))
+
+    parking_id, lot_name = lot[0], lot[1]
+
+    try:
+        if parking_id:
+            # Delete real_time slots
+            cursor.execute("DELETE FROM real_time_parking_info WHERE parking_id = %s", (parking_id,))
+            # Delete bookings & linked payments
+            cursor.execute("SELECT booking_id FROM bookings WHERE parking_id = %s", (parking_id,))
+            b_ids = [r[0] for r in cursor.fetchall()]
+            if b_ids:
+                cur_ids_str = ','.join(str(b) for b in b_ids)
+                cursor.execute(f"DELETE FROM payments WHERE booking_id IN ({cur_ids_str})")
+            cursor.execute("DELETE FROM bookings WHERE parking_id = %s", (parking_id,))
+
+        cursor.execute("DELETE FROM parking_lots WHERE ID = %s", (id,))
+        mysql.connection.commit()
+        flash(f"Parking lot '{lot_name}' deleted successfully.", "success")
+    except Exception as exc:
+        mysql.connection.rollback()
+        app.logger.error(f"Error deleting parking lot {id}: {exc}")
+        flash(f"Error deleting parking lot: {exc}", "danger")
+    finally:
+        cursor.close()
+
+    return redirect(url_for('view_parking_lots'))
 
 
 
@@ -1003,25 +1139,111 @@ def manage_users():
     if 'user' in session and session.get('role') == 'admin':
         cursor = mysql.connection.cursor()
 
-        # Get all users
-        cursor.execute("SELECT user_id, role, name, email, is_verified FROM users")
-        users = cursor.fetchall()
+        # 1. Fetch all users
+        cursor.execute("SELECT user_id, role, name, email, is_verified FROM users ORDER BY user_id DESC")
+        users_rows = cursor.fetchall()
 
-        # Fetch profiles
-        cursor.execute("SELECT * FROM customer_profiles")
-        profiles = cursor.fetchall()
+        # 2. Fetch customer profiles
+        cursor.execute("""
+            SELECT user_id, name, phone_no, vehicle_no, age, gender, address, city, state, photo
+            FROM customer_profiles
+        """)
+        profiles_rows = cursor.fetchall()
+        profiles_by_user = {}
+        for p in profiles_rows:
+            profiles_by_user[p[0]] = {
+                'name': p[1],
+                'phone_no': p[2] or 'N/A',
+                'vehicle_no': p[3] or 'N/A',
+                'age': p[4] if p[4] is not None else 'N/A',
+                'gender': p[5] or 'N/A',
+                'address': p[6] or 'N/A',
+                'city': p[7] or 'N/A',
+                'state': p[8] or 'N/A',
+                'photo': p[9]
+            }
 
-        # Fetch payment info
-        cursor.execute("SELECT * FROM payments")
-        payments = cursor.fetchall()
+        # 3. Fetch bookings with parking lot names
+        cursor.execute("""
+            SELECT b.booking_id, b.user_id, b.parking_id, COALESCE(pl.Name, b.parking_id) AS parking_name,
+                   b.entry_time, b.exit_time, b.slot_no, b.status, b.amount
+            FROM bookings b
+            LEFT JOIN parking_lots pl ON pl.parking_id = b.parking_id
+            ORDER BY b.entry_time DESC
+        """)
+        bookings_rows = cursor.fetchall()
+        bookings_by_user = {}
+        for b in bookings_rows:
+            uid = b[1]
+            if uid not in bookings_by_user:
+                bookings_by_user[uid] = []
+            bookings_by_user[uid].append({
+                'booking_id': b[0],
+                'parking_id': b[2],
+                'parking_name': b[3],
+                'entry_time': b[4].strftime('%Y-%m-%d %H:%M') if b[4] else 'N/A',
+                'exit_time': b[5].strftime('%Y-%m-%d %H:%M') if b[5] else 'In Progress',
+                'slot_no': b[6],
+                'status': b[7],
+                'amount': float(b[8] or 0.0)
+            })
 
-        # Fetch bookings
-        cursor.execute("SELECT * FROM bookings")
-        bookings = cursor.fetchall()
+        # 4. Fetch payments
+        cursor.execute("""
+            SELECT payment_id, user_id, booking_id, amount, method, status, paid_at
+            FROM payments
+            ORDER BY paid_at DESC
+        """)
+        payments_rows = cursor.fetchall()
+        payments_by_user = {}
+        for p in payments_rows:
+            uid = p[1]
+            if uid not in payments_by_user:
+                payments_by_user[uid] = []
+            payments_by_user[uid].append({
+                'payment_id': p[0],
+                'booking_id': p[2] if p[2] is not None else 'N/A',
+                'amount': float(p[3] or 0.0),
+                'method': p[4] or 'N/A',
+                'status': p[5] or 'N/A',
+                'paid_at': p[6].strftime('%Y-%m-%d %H:%M') if p[6] else 'N/A'
+            })
 
         cursor.close()
 
-        return render_template("manage_users.html", users=users, profiles=profiles, payments=payments, bookings=bookings)
+        # Build clean user dicts
+        user_list = []
+        for u in users_rows:
+            uid = u[0]
+            profile = profiles_by_user.get(uid, {})
+            u_bookings = bookings_by_user.get(uid, [])
+            u_payments = payments_by_user.get(uid, [])
+            total_spent = sum(p['amount'] for p in u_payments if str(p['status']).lower() == 'success')
+
+            user_list.append({
+                'user_id': uid,
+                'role': u[1],
+                'name': u[2] or profile.get('name') or 'Unnamed User',
+                'email': u[3],
+                'is_verified': bool(u[4]),
+                'profile': profile,
+                'bookings': u_bookings,
+                'payments': u_payments,
+                'booking_count': len(u_bookings),
+                'payment_count': len(u_payments),
+                'total_spent': round(total_spent, 2)
+            })
+
+        current_admin_email = session.get('user')
+        return render_template(
+            "manage_users.html",
+            user_list=user_list,
+            current_admin_email=current_admin_email,
+            users=users_rows,
+            profiles=profiles_rows,
+            payments=payments_rows,
+            bookings=bookings_rows
+        )
 
     flash("Access denied.", "danger")
     return redirect(url_for("login"))
@@ -1031,6 +1253,16 @@ def manage_users():
 def delete_user(user_id):
     if 'user' in session and session.get('role') == 'admin':
         cursor = mysql.connection.cursor()
+
+        # Prevent admin from deleting their own active account
+        current_email = session.get('user')
+        cursor.execute("SELECT user_id FROM users WHERE email = %s", (current_email,))
+        current_admin = cursor.fetchone()
+        if current_admin and current_admin[0] == user_id:
+            cursor.close()
+            flash('You cannot delete your own active admin account.', 'warning')
+            return redirect(url_for('manage_users'))
+
         cursor.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
         mysql.connection.commit()
         cursor.close()

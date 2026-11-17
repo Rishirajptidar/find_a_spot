@@ -1,367 +1,667 @@
-<!DOCTYPE html>
-<html lang="en" >
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin - View Parking Lots</title>
+{% extends 'base.html' %}
 
-  <!-- Bootstrap 5 CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+{% block title %}Parking Lots Management - Find-A-Spot Admin{% endblock %}
 
-  <!-- FontAwesome -->
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-  />
+{% block content %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <style>
-    /* Layout */
-    body {
-      background-color: #f5f7fa;
-      color: #3a3a3a;
-      min-height: 100vh;
-      display: flex;
-      overflow-x: hidden;
-    }
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-    .sidebar {
-      width: 250px;
-      background-color: #a8dadc;
-      min-height: 100vh;
-      padding-top: 1rem;
-      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-      position: fixed;
-      left: 0;
-      top: 0;
-    }
-
-    .sidebar .nav-link {
-      color: #1d3557;
-      font-weight: 600;
-      padding: 15px 20px;
-      border-radius: 8px;
-      margin: 0 10px 10px 10px;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .sidebar .nav-link:hover,
-    .sidebar .nav-link.active {
-      background-color: #457b9d;
-      color: #f1faee;
-      text-decoration: none;
-    }
-
-    main {
-      margin-left: 260px;
-      padding: 30px 40px;
-      flex-grow: 1;
-    }
-
-    /* Header */
-    .header {
-      background-color: #a8dadc;
-      color: #1d3557;
-      padding: 25px 30px;
-      border-radius: 12px;
-      margin-bottom: 30px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      text-align: center;
-    }
-    .header h1 {
-      font-weight: 700;
-      font-size: 2.5rem;
-      margin-bottom: 0.3rem;
-    }
-    .header p {
-      font-size: 1.1rem;
-      font-weight: 500;
-      color: #2a4d69;
-    }
-
-    /* Search bar */
-    .search-container {
-      max-width: 400px;
-      margin-bottom: 25px;
-    }
-    .search-container input {
-      border-radius: 25px;
-      border: 1.5px solid #457b9d;
-      padding: 10px 20px;
-      width: 100%;
-      font-size: 1rem;
-      transition: box-shadow 0.3s ease;
-    }
-    .search-container input:focus {
-      outline: none;
-      box-shadow: 0 0 8px #457b9d;
-      border-color: #457b9d;
-    }
-
-    /* Card for table */
-    .table-card {
-      background: white;
-      border-radius: 12px;
-      padding: 20px 25px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-      overflow-x: auto;
-    }
-
-    /* Table */
-    table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0 10px;
-    }
-    thead tr {
-      background-color: #d1e7dd;
-      border-radius: 12px;
-    }
-    thead th {
-      border: none;
-      padding: 12px 15px;
-      font-weight: 700;
-      font-size: 1rem;
-      color: #1d3557;
-      text-align: left;
-    }
-    tbody tr {
-      background: #f9fcfb;
-      transition: background-color 0.25s ease;
-      cursor: default;
-      border-radius: 12px;
-      box-shadow: 0 2px 5px rgb(0 0 0 / 0.05);
-    }
-    tbody tr:hover {
-      background-color: #e9f7ef;
-    }
-    tbody td {
-      padding: 12px 15px;
-      vertical-align: middle;
-      color: #3a3a3a;
-    }
-
-    /* Buttons */
-    .btn-icon {
-      padding: 6px 10px;
-      border-radius: 8px;
-      font-size: 1rem;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .btn-edit {
-      background-color: #ffd166;
-      color: #6b4f01;
-      border: none;
-    }
-    .btn-edit:hover {
-      background-color: #ffb347;
-      color: #4a3300;
-    }
-    .btn-delete {
-      background-color: #ef476f;
-      color: white;
-      border: none;
-      margin-left: 8px;
-    }
-    .btn-delete:hover {
-      background-color: #d90429;
-      color: white;
-    }
-
-    /* Pagination */
-    .pagination {
-      justify-content: center;
-      margin-top: 25px;
-    }
-    .page-link {
-      color: #457b9d;
-      font-weight: 600;
-    }
-    .page-link:hover {
-      background-color: #457b9d;
-      color: white;
-    }
-    .page-item.active .page-link {
-      background-color: #457b9d;
-      border-color: #457b9d;
-      color: white;
-    }
-
-    /* Icon spacing */
-    .icon {
-      color: #457b9d;
-      margin-right: 8px;
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Sidebar -->
-  <nav class="sidebar d-flex flex-column">
-    <a href="/admin/dashboard" class="nav-link active">
-      <i class="fas fa-tachometer-alt"></i> Dashboard
-    </a>
-    <a href="/admin/view_parking_lots" class="nav-link">
-      <i class="fas fa-parking"></i> Parking Lots
-    </a>
-    <a href="/admin/manage_users" class="nav-link">
-      <i class="fas fa-users"></i> Manage Users
-    </a>
-    <a href="/admin/reports" class="nav-link">
-      <i class="fas fa-file-alt"></i> Reports
-    </a>
-    <a href="/logout" class="nav-link mt-auto text-danger">
-      <i class="fas fa-sign-out-alt"></i> Logout
-    </a>
-  </nav>
-
-  <!-- Main content -->
-  <main>
-    <div class="header">
-      <h1><i class="fas fa-parking icon"></i> Parking Lots Overview</h1>
-      <p class="lead">Admin Dashboard - Manage and view all parking lots</p>
+  <!-- Breadcrumbs & Quick Nav -->
+  <div class="flex items-center justify-between mb-4 text-sm">
+    <nav class="flex items-center space-x-2 text-gray-500">
+      <a href="{{ url_for('admin_dashboard') }}" class="hover:text-blue-600 transition flex items-center gap-1">
+        <i class="fas fa-arrow-left text-xs"></i> Back to Dashboard
+      </a>
+      <span>/</span>
+      <span class="text-gray-800 font-semibold">Parking Lots</span>
+    </nav>
+    <div class="flex items-center space-x-3">
+      <a
+        href="{{ url_for('live_parking_info_page') }}"
+        class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
+      >
+        <i class="fas fa-satellite-dish mr-1.5"></i> Live Parking Info
+      </a>
+      <a
+        href="{{ url_for('add_parking') }}"
+        class="inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 shadow-sm transition"
+      >
+        <i class="fas fa-plus mr-1.5"></i> Add Parking Lot
+      </a>
     </div>
+  </div>
 
-    <!-- Search -->
-    <div class="search-container">
+  <!-- Page Header -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-gray-200">
+    <div>
+      <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+        <span class="p-2.5 bg-blue-600 text-white rounded-xl shadow-md text-xl">
+          <i class="fas fa-parking"></i>
+        </span>
+        Parking Lots Overview
+      </h1>
+      <p class="text-sm text-gray-500 mt-1">
+        View, search, edit details, and manage capacities for all registered parking locations.
+      </p>
+    </div>
+  </div>
+
+  <!-- Summary KPI Cards -->
+  {% set total_lots = parking_lots|length %}
+  {% set total_capacity = parking_lots|map(attribute='capacity')|sum %}
+  {% set total_occupied = parking_lots|map(attribute='occupied')|sum %}
+  {% set avg_rate = (parking_lots|map(attribute='price_per_hour')|sum / total_lots) if total_lots > 0 else 0 %}
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Locations</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1">{{ total_lots }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+          <i class="fas fa-map-marked-alt"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Capacity</p>
+          <p class="text-2xl font-bold text-emerald-600 mt-1">{{ total_capacity }} <span class="text-xs font-normal text-gray-500">Slots</span></p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+          <i class="fas fa-th-large"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Current Occupied</p>
+          <p class="text-2xl font-bold text-purple-600 mt-1">{{ total_occupied }} <span class="text-xs font-normal text-gray-500">Cars</span></p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-lg">
+          <i class="fas fa-car-side"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow transition">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-gray-500 uppercase tracking-wider">Average Rate</p>
+          <p class="text-2xl font-bold text-amber-600 mt-1">₹{{ "%.2f"|format(avg_rate) }}<span class="text-xs font-normal text-gray-500">/hr</span></p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+          <i class="fas fa-tags"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Controls -->
+  <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="relative w-full md:w-80">
+      <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+        <i class="fas fa-search"></i>
+      </span>
       <input
         type="text"
-        id="searchInput"
-        placeholder="Search parking lots by name, address, or type..."
-        aria-label="Search Parking Lots"
+        id="lotSearchInput"
+        placeholder="Search parking lots by name, address, ID..."
+        class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
       />
     </div>
 
-    <!-- Table card -->
-    <div class="table-card">
-      <table id="parkingTable" class="table">
-        <thead>
+    <div class="flex items-center gap-3 w-full md:w-auto">
+      <select
+        id="typeFilter"
+        class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+      >
+        <option value="all">All Lot Types</option>
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+        <option value="mall">Mall / Commercial</option>
+      </select>
+
+      <span id="filteredLotCount" class="text-xs text-gray-500 font-medium whitespace-nowrap">
+        Showing {{ total_lots }} parking lots
+      </span>
+    </div>
+  </div>
+
+  <!-- Parking Lots Table -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-left text-sm" id="parkingLotsTable">
+        <thead class="bg-gray-50">
           <tr>
-            <th><i class="fas fa-hashtag icon"></i>ID</th>
-            <th><i class="fas fa-building icon"></i>Name</th>
-            <th><i class="fas fa-map-marker-alt icon"></i>Address</th>
-            <th><i class="fas fa-location-arrow icon"></i>Coordinates</th>
-            <th><i class="fas fa-dollar-sign icon"></i>Price/Hour</th>
-            <th><i class="fas fa-car-side icon"></i>Type</th>
-            <th><i class="fas fa-phone icon"></i>Contact</th>
-            <th><i class="fas fa-tachometer-alt icon"></i>Capacity</th>
-            <th>Actions</th>
+            <th scope="col" class="py-3.5 pl-6 pr-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Lot & ID
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Location & Address
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Type
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Rate / Hour
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Capacity & Occupancy
+            </th>
+            <th scope="col" class="px-3 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Contact
+            </th>
+            <th scope="col" class="py-3.5 pl-3 pr-6 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Actions
+            </th>
           </tr>
         </thead>
-        <tbody id="tableBody">
+        <tbody class="divide-y divide-gray-100 bg-white" id="parkingLotsBody">
           {% for lot in parking_lots %}
-          <tr>
-            <td>{{ lot[0] }}</td>
-            <td>{{ lot[1] }}</td>
-            <td>{{ lot[2] }}</td>
-            <td>{{ lot[3] }}</td>
-            <td>${{ "%.2f"|format(lot[4]) }}</td>
-            <td>{{ lot[5] }}</td>
-            <td>{{ lot[6] }}</td>
-            <td>{{ lot[7] }}</td>
-            <td>
-              <button class="btn-icon btn-edit" title="Edit">
-                <i class="fas fa-pen"></i>
-              </button>
-              <button class="btn-icon btn-delete" title="Delete">
-                <i class="fas fa-trash"></i>
-              </button>
+          <tr
+            class="lot-row hover:bg-blue-50/50 transition"
+            data-id="{{ lot.id }}"
+            data-parking-id="{{ lot.parking_id|lower }}"
+            data-name="{{ lot.name|lower }}"
+            data-address="{{ lot.address|lower }}"
+            data-type="{{ lot.type|lower }}"
+            data-coords="{{ lot.coordinates|lower }}"
+          >
+            <!-- Lot Name & ID -->
+            <td class="py-4 pl-6 pr-3 whitespace-nowrap">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shadow-sm flex-shrink-0">
+                  <i class="fas fa-parking"></i>
+                </div>
+                <div>
+                  <h3 class="font-bold text-gray-900 text-sm">{{ lot.name }}</h3>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    <span class="text-xs text-gray-500 font-mono">Code: {{ lot.parking_id }}</span>
+                    <span class="text-xs text-gray-400">•</span>
+                    <span class="text-xs text-gray-400">ID: #{{ lot.id }}</span>
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Address & Coordinates -->
+            <td class="px-3 py-4 text-xs text-gray-700 max-w-xs">
+              <div class="flex flex-col gap-1">
+                <div class="flex items-start gap-1.5 text-gray-800">
+                  <i class="fas fa-map-marker-alt text-red-500 mt-0.5 flex-shrink-0"></i>
+                  <span class="line-clamp-2 leading-relaxed font-medium">{{ lot.address }}</span>
+                </div>
+                {% if lot.coordinates and lot.coordinates != 'N/A' %}
+                <div class="flex items-center gap-1.5 text-gray-500 font-mono text-[11px]">
+                  <i class="fas fa-compass text-gray-400"></i>
+                  <span>{{ lot.coordinates }}</span>
+                </div>
+                {% endif %}
+              </div>
+            </td>
+
+            <!-- Type -->
+            <td class="px-3 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                <i class="fas fa-car mr-1 text-[10px] text-gray-500"></i>
+                {{ lot.type|capitalize }}
+              </span>
+            </td>
+
+            <!-- Rate / Hour -->
+            <td class="px-3 py-4 whitespace-nowrap">
+              <span class="text-sm font-bold text-gray-900">₹{{ "%.2f"|format(lot.price_per_hour) }}</span>
+              <span class="text-xs text-gray-500 font-normal">/hr</span>
+            </td>
+
+            <!-- Capacity & Occupancy -->
+            <td class="px-3 py-4 whitespace-nowrap text-xs">
+              <div class="flex flex-col gap-1.5 w-36">
+                <div class="flex justify-between items-center font-medium">
+                  <span class="text-gray-700"><strong>{{ lot.capacity }}</strong> Slots</span>
+                  <span class="text-purple-600 font-semibold">{{ lot.occupied }} Occ.</span>
+                </div>
+                {% set occ_pct = ((lot.occupied / lot.capacity) * 100)|round|int if lot.capacity > 0 else 0 %}
+                <div class="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    class="h-1.5 rounded-full {{ 'bg-red-500' if occ_pct > 80 else ('bg-amber-500' if occ_pct > 50 else 'bg-blue-600') }}"
+                    style="width: {{ occ_pct }}%"
+                  ></div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Contact -->
+            <td class="px-3 py-4 whitespace-nowrap text-xs text-gray-600">
+              <div class="flex items-center gap-1.5">
+                <i class="fas fa-phone text-gray-400"></i>
+                <span>{{ lot.contact_number if lot.contact_number and lot.contact_number != 'N/A' else 'Not provided' }}</span>
+              </div>
+            </td>
+
+            <!-- Actions (Edit & Delete Functional Buttons) -->
+            <td class="py-4 pl-3 pr-6 whitespace-nowrap text-right">
+              <div class="flex items-center justify-end gap-2">
+                <!-- Edit Button -->
+                <button
+                  type="button"
+                  onclick="openEditLotModal({{ lot|tojson|forceescape }})"
+                  class="inline-flex items-center px-3 py-1.5 border border-amber-300 shadow-sm text-xs font-semibold rounded-lg text-amber-800 bg-amber-50 hover:bg-amber-100 hover:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
+                  title="Edit parking lot details"
+                >
+                  <i class="fas fa-edit mr-1.5 text-amber-600"></i> Edit
+                </button>
+
+                <!-- Delete Button -->
+                <button
+                  type="button"
+                  onclick="confirmDeleteLot({{ lot.id }}, '{{ lot.name|replace('\'', '\\\'') }}', '{{ lot.parking_id|replace('\'', '\\\'') }}', {{ lot.capacity }})"
+                  class="inline-flex items-center px-3 py-1.5 border border-red-200 shadow-sm text-xs font-semibold rounded-lg text-red-600 bg-red-50 hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition"
+                  title="Delete parking lot"
+                >
+                  <i class="fas fa-trash-alt mr-1.5"></i> Delete
+                </button>
+              </div>
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="9" class="text-center">No parking lots found.</td></tr>
+          <tr>
+            <td colspan="7" class="py-12 text-center text-gray-500">
+              <i class="fas fa-parking text-4xl text-gray-300 mb-3 block"></i>
+              <p class="font-semibold text-gray-700">No parking lots found.</p>
+              <a href="{{ url_for('add_parking') }}" class="text-blue-600 hover:underline text-xs mt-1 inline-block">
+                + Register your first parking location
+              </a>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <!-- Pagination -->
-    <nav>
-      <ul id="pagination" class="pagination"></ul>
-    </nav>
-  </main>
+    <!-- Empty State for Live Search -->
+    <div id="noLotsState" class="hidden py-12 text-center">
+      <div class="w-16 h-16 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-3 text-2xl">
+        <i class="fas fa-search-location"></i>
+      </div>
+      <h3 class="text-base font-semibold text-gray-800">No matching parking lots</h3>
+      <p class="text-sm text-gray-500 mt-1">Try searching by a different name, city, or address.</p>
+    </div>
+  </div>
 
-  <!-- Bootstrap JS Bundle -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</div>
 
-  <script>
-    // Pagination & Search
+<!-- ========================================== -->
+<!-- EDIT PARKING LOT MODAL -->
+<!-- ========================================== -->
+<div id="editLotModal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="edit-lot-title" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" onclick="closeEditLotModal()"></div>
 
-    const rowsPerPage = 6;
-    const table = document.getElementById('parkingTable');
-    const tableBody = document.getElementById('tableBody');
-    const searchInput = document.getElementById('searchInput');
-    const pagination = document.getElementById('pagination');
+  <div class="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-xl border border-gray-100">
 
-    let currentPage = 1;
-    let rows = Array.from(tableBody.querySelectorAll('tr'));
+      <!-- Modal Header -->
+      <div class="bg-gradient-to-r from-blue-700 to-indigo-700 px-6 py-5 text-white flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-lg text-white">
+            <i class="fas fa-edit"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-bold" id="edit-lot-title">Edit Parking Lot</h3>
+            <p class="text-xs text-blue-100 mt-0.5" id="editLotSubTitle">Code: -</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick="closeEditLotModal()"
+          class="rounded-lg p-2 text-blue-100 hover:text-white hover:bg-white/10 transition focus:outline-none"
+        >
+          <i class="fas fa-times text-lg"></i>
+        </button>
+      </div>
 
-    function displayRows(rowsToDisplay) {
-      tableBody.innerHTML = '';
-      rowsToDisplay.forEach(row => tableBody.appendChild(row));
-    }
+      <!-- Edit Form -->
+      <form id="editParkingForm" method="POST" action="">
+        <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-sm">
 
-    function setupPagination(rowsToPaginate) {
-      pagination.innerHTML = '';
-      let pageCount = Math.ceil(rowsToPaginate.length / rowsPerPage);
+          <!-- Parking Name -->
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1" for="edit_name">
+              Parking Lot Name <span class="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="name"
+              id="edit_name"
+              required
+              class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
+            />
+          </div>
 
-      if (pageCount <= 1) {
-        pagination.style.display = 'none';
-        return;
+          <!-- Address -->
+          <div>
+            <label class="block font-semibold text-gray-700 mb-1" for="edit_address">
+              Address / Area <span class="text-red-500">*</span>
+            </label>
+            <textarea
+              name="address"
+              id="edit_address"
+              rows="2"
+              required
+              class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            ></textarea>
+          </div>
+
+          <!-- Coordinates with Geolocation button -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-gray-700" for="edit_coordinates">
+                Coordinates (Latitude, Longitude)
+              </label>
+              <button
+                type="button"
+                onclick="getEditCurrentLocation()"
+                id="editGetLocBtn"
+                class="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 focus:outline-none"
+              >
+                <i class="fas fa-crosshairs"></i> Get Current Location
+              </button>
+            </div>
+            <input
+              type="text"
+              name="coordinates"
+              id="edit_coordinates"
+              placeholder="e.g. 22.719568, 75.857727"
+              class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+            />
+            <p id="editLocStatus" class="text-[11px] text-gray-500 mt-1 hidden"></p>
+          </div>
+
+          <!-- Capacity & Price per Hour -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block font-semibold text-gray-700 mb-1" for="edit_capacity">
+                Capacity (Total Slots) <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                name="capacity"
+                id="edit_capacity"
+                min="1"
+                required
+                class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-700 mb-1" for="edit_price_per_hour">
+                Price Per Hour (₹) <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                step="0.50"
+                min="0"
+                name="price_per_hour"
+                id="edit_price_per_hour"
+                required
+                class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+              />
+            </div>
+          </div>
+
+          <!-- Type & Contact Number -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block font-semibold text-gray-700 mb-1" for="edit_type">
+                Parking Type
+              </label>
+              <select
+                name="type"
+                id="edit_type"
+                class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="public">Public Parking</option>
+                <option value="private">Private Parking</option>
+                <option value="mall">Mall / Commercial</option>
+                <option value="covered">Covered / Basement</option>
+                <option value="open">Open Air</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-gray-700 mb-1" for="edit_contact_number">
+                Contact Number
+              </label>
+              <input
+                type="text"
+                name="contact_number"
+                id="edit_contact_number"
+                placeholder="e.g. 9876543210"
+                class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+              />
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Form Actions -->
+        <div class="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200">
+          <button
+            type="button"
+            onclick="closeEditLotModal()"
+            class="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm transition flex items-center gap-2"
+          >
+            <i class="fas fa-save"></i> Save Changes
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<!-- ========================================== -->
+<!-- DELETE PARKING LOT CONFIRMATION MODAL -->
+<!-- ========================================== -->
+<div id="deleteLotModal" class="fixed inset-0 z-50 overflow-y-auto hidden" aria-labelledby="delete-lot-title" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" onclick="closeDeleteLotModal()"></div>
+
+  <div class="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-gray-100 p-6">
+      <div class="flex items-center gap-4 mb-4">
+        <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xl flex-shrink-0">
+          <i class="fas fa-trash-alt"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-gray-900" id="delete-lot-title">Delete Parking Lot</h3>
+          <p class="text-xs text-gray-500">This action permanently deletes this parking location.</p>
+        </div>
+      </div>
+
+      <div class="bg-red-50 border border-red-200 rounded-xl p-3.5 mb-5 text-sm text-red-800">
+        <p>Are you sure you want to delete <strong id="deleteLotName">Parking Lot</strong>?</p>
+        <p class="text-xs text-red-600 mt-1">
+          Code: <span id="deleteLotCode" class="font-mono font-semibold">560076</span> • Capacity: <span id="deleteLotCapacity">100</span> slots
+        </p>
+        <p class="text-xs text-red-500 mt-2">
+          * Warning: All slots, bookings, and linked records for this parking lot will be permanently removed.
+        </p>
+      </div>
+
+      <form id="deleteParkingForm" method="POST" action="">
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            onclick="closeDeleteLotModal()"
+            class="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm shadow-sm transition flex items-center gap-2"
+          >
+            <i class="fas fa-trash-alt"></i> Yes, Delete Parking Lot
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Client-side Interactive Logic -->
+<script>
+  // Live Search & Filter
+  const lotSearchInput = document.getElementById('lotSearchInput');
+  const typeFilter = document.getElementById('typeFilter');
+  const lotRows = document.querySelectorAll('.lot-row');
+  const filteredLotCount = document.getElementById('filteredLotCount');
+  const noLotsState = document.getElementById('noLotsState');
+
+  function applyLotFilters() {
+    const query = (lotSearchInput.value || '').trim().toLowerCase();
+    const selectedType = typeFilter.value;
+
+    let visibleCount = 0;
+
+    lotRows.forEach(row => {
+      const name = row.getAttribute('data-name') || '';
+      const address = row.getAttribute('data-address') || '';
+      const pid = row.getAttribute('data-parking-id') || '';
+      const type = row.getAttribute('data-type') || '';
+      const coords = row.getAttribute('data-coords') || '';
+
+      const matchesSearch = !query ||
+        name.includes(query) ||
+        address.includes(query) ||
+        pid.includes(query) ||
+        coords.includes(query);
+
+      const matchesType = (selectedType === 'all') || (type === selectedType);
+
+      if (matchesSearch && matchesType) {
+        row.style.display = '';
+        visibleCount++;
       } else {
-        pagination.style.display = 'flex';
+        row.style.display = 'none';
       }
-
-      for (let i = 1; i <= pageCount; i++) {
-        let li = document.createElement('li');
-        li.classList.add('page-item');
-        if (i === currentPage) li.classList.add('active');
-
-        let a = document.createElement('a');
-        a.classList.add('page-link');
-        a.href = "#";
-        a.textContent = i;
-        a.addEventListener('click', (e) => {
-          e.preventDefault();
-          currentPage = i;
-          updateTable();
-        });
-
-        li.appendChild(a);
-        pagination.appendChild(li);
-      }
-    }
-
-    function filterRows() {
-      const filterText = searchInput.value.toLowerCase().trim();
-      return rows.filter(row => {
-        const cells = row.querySelectorAll('td');
-        return Array.from(cells).some(td =>
-          td.textContent.toLowerCase().includes(filterText)
-        );
-      });
-    }
-
-    function updateTable() {
-      const filteredRows = filterRows();
-      const start = (currentPage - 1) * rowsPerPage;
-      const end = start + rowsPerPage;
-      displayRows(filteredRows.slice(start, end));
-      setupPagination(filteredRows);
-    }
-
-    searchInput.addEventListener('input', () => {
-      currentPage = 1;
-      updateTable();
     });
 
-    // Initialize table display
-    updateTable();
-  </script>
-</body>
-</html>
+    filteredLotCount.textContent = `Showing ${visibleCount} of ${lotRows.length} parking lots`;
+    if (visibleCount === 0) {
+      noLotsState.classList.remove('hidden');
+    } else {
+      noLotsState.classList.add('hidden');
+    }
+  }
+
+  lotSearchInput.addEventListener('input', applyLotFilters);
+  typeFilter.addEventListener('change', applyLotFilters);
+
+  // Edit Modal Handling
+  function openEditLotModal(lot) {
+    document.getElementById('editLotSubTitle').textContent = `Code: ${lot.parking_id || lot.id} • DB ID #${lot.id}`;
+    document.getElementById('edit_name').value = lot.name || '';
+    document.getElementById('edit_address').value = lot.address && lot.address !== 'N/A' ? lot.address : '';
+    document.getElementById('edit_coordinates').value = lot.coordinates && lot.coordinates !== 'N/A' ? lot.coordinates : '';
+    document.getElementById('edit_capacity').value = lot.capacity || 0;
+    document.getElementById('edit_price_per_hour').value = lot.price_per_hour || 0;
+    document.getElementById('edit_contact_number').value = lot.contact_number && lot.contact_number !== 'N/A' ? lot.contact_number : '';
+    
+    // Select type option
+    const typeSelect = document.getElementById('edit_type');
+    const lotType = (lot.type || 'public').toLowerCase();
+    let matched = false;
+    for (let opt of typeSelect.options) {
+      if (opt.value.toLowerCase() === lotType) {
+        opt.selected = true;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      typeSelect.value = 'public';
+    }
+
+    document.getElementById('editParkingForm').action = `/admin/edit_parking/${lot.id}`;
+    document.getElementById('editLotModal').classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  }
+
+  function closeEditLotModal() {
+    document.getElementById('editLotModal').classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+    const status = document.getElementById('editLocStatus');
+    status.classList.add('hidden');
+    status.textContent = '';
+  }
+
+  // Geolocation helper inside edit modal
+  function getEditCurrentLocation() {
+    const status = document.getElementById('editLocStatus');
+    const coordInput = document.getElementById('edit_coordinates');
+    status.classList.remove('hidden');
+
+    if (!navigator.geolocation) {
+      status.textContent = 'Geolocation is not supported by your browser.';
+      status.className = 'text-[11px] text-red-600 mt-1';
+      return;
+    }
+
+    status.textContent = 'Detecting current coordinates...';
+    status.className = 'text-[11px] text-blue-600 mt-1';
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lon = pos.coords.longitude.toFixed(6);
+        coordInput.value = `${lat}, ${lon}`;
+        status.textContent = `Coordinates detected: ${lat}, ${lon}`;
+        status.className = 'text-[11px] text-emerald-600 mt-1 font-semibold';
+      },
+      (err) => {
+        status.textContent = 'Unable to fetch current location. Please enter manually.';
+        status.className = 'text-[11px] text-red-600 mt-1';
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+  }
+
+  // Delete Modal Handling
+  function confirmDeleteLot(lotId, lotName, lotCode, lotCapacity) {
+    document.getElementById('deleteLotName').textContent = lotName || 'this lot';
+    document.getElementById('deleteLotCode').textContent = lotCode || lotId;
+    document.getElementById('deleteLotCapacity').textContent = lotCapacity || 0;
+    document.getElementById('deleteParkingForm').action = `/admin/delete_parking/${lotId}`;
+
+    document.getElementById('deleteLotModal').classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+  }
+
+  function closeDeleteLotModal() {
+    document.getElementById('deleteLotModal').classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+  }
+
+  // Close modals on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const editModal = document.getElementById('editLotModal');
+      const deleteModal = document.getElementById('deleteLotModal');
+      if (!deleteModal.classList.contains('hidden')) {
+        closeDeleteLotModal();
+      } else if (!editModal.classList.contains('hidden')) {
+        closeEditLotModal();
+      }
+    }
+  });
+</script>
+{% endblock %}

@@ -42,10 +42,10 @@
         <h1 class="text-xl font-bold">Find-A-Spot</h1>
       </div>
       <nav class="hidden md:flex space-x-6">
-        <a href="#about" class="hover:text-blue-200">About</a>
+        <a href="{{ url_for('about') }}" class="hover:text-blue-200">About</a>
         <a href="#features" class="hover:text-blue-200">Features</a>
         <a href="#reviews" class="hover:text-blue-200">Reviews</a>
-        <a href="#contact" class="hover:text-blue-200">Contact</a>
+        <a href="{{ url_for('support') }}" class="hover:text-blue-200">Contact</a>
       </nav>
       <div class="flex items-center space-x-4">
         <a href="{{ url_for('login') }}" class="bg-white text-blue-600 px-4 py-2 rounded-full font-medium hover:bg-blue-50 transition">Sign In</a>
@@ -61,7 +61,7 @@
       <a href="{{ url_for('register') }}" class="bg-white text-blue-600 px-6 py-3 rounded-full font-bold hover:bg-blue-100 transition">Get Started</a>
     </div>
     <div class="mt-8">
-      <img src="https://media.giphy.com/media/QBd2kLB5qDmysEXre9/giphy.gif" alt="Parking Animation" class="mx-auto w-80 rounded-xl shadow-lg">
+      <img src="static\parkgif.gif" alt="Parking Animation" class="mx-auto w-80 rounded-xl shadow-lg">
     </div>
   </section>
 
